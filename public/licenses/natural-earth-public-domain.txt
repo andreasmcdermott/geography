@@ -1,0 +1,7 @@
+Natural Earth map data
+
+Wayfinder uses Natural Earth Admin 0 country boundaries at 1:50m scale.
+Natural Earth raster and vector map data is in the public domain.
+
+Dataset: https://www.naturalearthdata.com/downloads/50m-cultural-vectors/50m-admin-0-countries-2/
+Terms: https://www.naturalearthdata.com/about/terms-of-use/
