@@ -84,6 +84,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(53, 105, 202
 .city-lines i:nth-child(3) { font-size: 39px; margin-right: -3px; }
 
 .mode-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 24px 0 14px; }
+.mode-picker.three-modes { grid-template-columns: repeat(3, 1fr); }
 .mode-picker button { border: 1px solid var(--line); background: transparent; min-height: 58px; padding: 10px 12px; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 5px; }
 .mode-picker button strong { font-size: 12px; }
 .mode-picker button span { color: var(--muted); font-size: 9px; }
@@ -129,6 +130,7 @@ footer a:hover { color: var(--ink); }
 .quiz-position { font: 500 12px/1 var(--font-geist-mono), monospace; color: var(--muted); }
 .quiz-position span { color: var(--ink); font-weight: 750; }
 .question-wrap { width: min(840px, 100%); margin: 55px auto 80px; }
+.question-wrap.elimination-wrap { width: min(1180px, 100%); }
 .question-progress { height: 4px; background: #dcdcd2; margin-bottom: 38px; }
 .question-progress span { display: block; height: 100%; background: var(--teal); transition: width .25s ease; }
 .question-kicker { display: flex; align-items: center; gap: 10px; justify-content: center; color: var(--muted); font: 600 10px/1 var(--font-geist-mono), monospace; letter-spacing: .09em; text-transform: uppercase; }
@@ -148,6 +150,12 @@ footer a:hover { color: var(--ink); }
 .answer-grid button.correct { background: #e3f0d8; border-color: #5f8054; }
 .answer-grid button.wrong { background: #f9dfd5; border-color: #bd6a50; }
 .answer-mark { position: absolute; right: 18px; font-size: 22px; }
+.elimination-options { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.elimination-options button { min-height: 72px; padding: 10px 12px; justify-content: center; text-align: center; }
+.elimination-options .answer-flag { font-size: 46px; }
+.elimination-options.country-options { grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); }
+.elimination-options.country-options button { min-height: 54px; }
+.elimination-options .answer-mark { right: 8px; top: 6px; font-size: 16px; }
 .feedback { margin-top: 18px; padding: 17px 18px; display: flex; justify-content: space-between; align-items: center; gap: 20px; border-left: 4px solid; }
 .feedback.success { background: #e2eed8; border-color: #5b7c51; }
 .feedback.error { background: #f8dfd6; border-color: #c86648; }
@@ -155,6 +163,7 @@ footer a:hover { color: var(--ink); }
 .feedback strong { font-size: 14px; }
 .feedback span { color: #58635c; font-size: 11px; }
 .feedback button { background: var(--ink); color: white; border: 0; min-width: 160px; padding: 13px 16px; cursor: pointer; font-weight: 650; display: flex; justify-content: space-between; }
+.floating-feedback { position: fixed; z-index: 20; left: 50%; bottom: 22px; width: min(760px, calc(100vw - 32px)); transform: translateX(-50%); box-shadow: 0 15px 45px rgba(21, 36, 31, .22); margin: 0; }
 
 .complete-card { max-width: 630px; margin: 64px auto 90px; background: var(--card); border: 1px solid var(--line); padding: 48px clamp(25px, 6vw, 70px); text-align: center; box-shadow: 0 24px 70px rgba(21,36,31,.08); }
 .complete-burst { margin: 0 auto 23px; width: 54px; height: 54px; display: grid; place-items: center; background: var(--lime); border-radius: 50%; font-size: 23px; }
@@ -217,6 +226,7 @@ footer a:hover { color: var(--ink); }
   .hero h1 { font-size: 50px; }
   .topic-cards { grid-template-columns: 1fr; }
   .topic-card { min-height: 245px; }
+  .mode-picker.three-modes { grid-template-columns: 1fr; }
   .progress-strip { grid-template-columns: 1fr; gap: 27px; }
   .reset-button { grid-column: 1; justify-self: start; margin: -13px 0 0; }
   footer { gap: 20px; flex-direction: column; }
@@ -225,6 +235,10 @@ footer a:hover { color: var(--ink); }
   .question-wrap { margin: 35px auto 60px; }
   .answer-grid { grid-template-columns: 1fr; }
   .answer-grid button { min-height: 67px; }
+  .elimination-options { grid-template-columns: repeat(3, 1fr); }
+  .elimination-options button { min-height: 62px; padding: 8px; }
+  .elimination-options .answer-flag { font-size: 38px; }
+  .elimination-options.country-options { grid-template-columns: repeat(2, 1fr); }
   .feedback { align-items: stretch; flex-direction: column; }
   .feedback button { width: 100%; }
   .library-heading { grid-template-columns: 1fr; }

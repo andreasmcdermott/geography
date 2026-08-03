@@ -24,6 +24,10 @@ test("keeps account progress behind authenticated server storage", async () => {
   assert.match(client, /Mastery is ignored in test mode/);
   assert.match(client, /quizLengths: QuizLength\[\] = \[20, 30, 40, 50, "all"\]/);
   assert.match(client, /mode === "adaptive"[\s\S]*mastered/);
+  assert.match(client, /Elimination/);
+  assert.match(client, /mode === "elimination"/);
+  assert.match(client, /eliminationAnswerOrder\.filter\(\(item\) => !usedCodes\.has\(item\.code\)\)/);
+  assert.match(client, /unused \$\{countryFirst \? "flags" : "countries"\} remain/);
   assert.match(route, /getChatGPTUser/);
   assert.match(route, /Authentication required/);
   assert.equal(JSON.parse(hosting).d1, "DB");
