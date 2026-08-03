@@ -34,6 +34,9 @@ test("keeps account progress behind authenticated server storage", async () => {
   assert.match(client, /MapQuestionCard/);
   assert.match(client, /map: \{\}/);
   assert.match(mapClient, /Find <em>\{country\.name\}<\/em> on the map/);
+  assert.match(mapClient, /Find this flag’s country on the map/);
+  assert.match(mapClient, /alt="Flag to locate"/);
+  assert.doesNotMatch(mapClient, /alt=\{`Flag of \$\{country\.name\}`\}/);
   assert.match(mapClient, /\/data\/world-map\.json/);
   assert.match(mapClient, /Scroll or use the controls to zoom, then drag to pan/);
   assert.match(mapClient, /Focus \$\{region\}/);
@@ -41,6 +44,8 @@ test("keeps account progress behind authenticated server storage", async () => {
   assert.match(mapClient, /onPointerMove/);
   assert.match(mapClient, /onWheel/);
   assert.ok(mapClient.indexOf("setPointerCapture") > mapClient.indexOf("onPointerMove"), "pointer capture must start only after a drag, not on an ordinary country click");
+  assert.match(client, /prompt=\{quiz\.questions\[quiz\.index\]\.direction === "country-to-answer" \? "country" : "flag"\}/);
+  assert.match(client, /Prompts alternate between country names and flags/);
   const map = JSON.parse(mapData);
   const countryCodes = new Set([...countriesSource.matchAll(/code: "([A-Z]{2})"/g)].map((match) => match[1]));
   assert.equal(map.features.length, 197);

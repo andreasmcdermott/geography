@@ -101,12 +101,10 @@ function buildQuiz(topic: Topic, length: QuizLength, progress: Progress, mode: Q
   const pool = mode === "elimination" || length === "all" ? shuffled : shuffled.slice(0, Math.min(length, shuffled.length));
   const optionPool = mode === "region" ? regionalPool : countries;
   const eliminationAnswerOrder = mode === "elimination" ? shuffle(regionalPool) : [];
-  const firstDirection: Direction = topic === "map" || Math.random() > 0.5 ? "country-to-answer" : "answer-to-country";
+  const firstDirection: Direction = Math.random() > 0.5 ? "country-to-answer" : "answer-to-country";
 
   return pool.map((country, index) => {
-    const direction = topic === "map"
-      ? "country-to-answer"
-      : index % 2 === 0
+    const direction = index % 2 === 0
       ? firstDirection
       : firstDirection === "country-to-answer"
         ? "answer-to-country"
@@ -328,6 +326,7 @@ export default function QuizApp() {
             total={quiz.questions.length}
             selectedCode={quiz.selectedCode}
             region={quiz.region}
+            prompt={quiz.questions[quiz.index].direction === "country-to-answer" ? "country" : "flag"}
             onAnswer={answer}
             onNext={nextQuestion}
           />
@@ -400,7 +399,7 @@ export default function QuizApp() {
                   <span className="card-label">Map</span>
                   <span className="map-motif" aria-hidden="true"><i /><i /><i /></span>
                   <strong>Find it.<br />Place it.</strong>
-                  <small>Country → Location</small>
+                  <small>Country / Flag → Location</small>
                 </button>
               </div>
             </div>
@@ -465,10 +464,14 @@ export default function QuizApp() {
               <p className="adaptive-note">
                 <span aria-hidden="true">✦</span>
                 {quizMode === "adaptive"
-                  ? "Questions alternate direction and retire after a 3-answer streak."
+                  ? topic === "map"
+                    ? "Prompts alternate between country names and flags, and retire after a 3-answer streak."
+                    : "Questions alternate direction and retire after a 3-answer streak."
                   : quizMode === "elimination"
                     ? `Every unused flag or country in ${region === "All" ? "the world" : region} remains available until its turn is complete.`
-                  : `Includes mastered countries from ${region === "All" ? "every region" : region} and alternates both directions.`}
+                  : topic === "map"
+                    ? `Includes mastered countries from ${region === "All" ? "every region" : region} and alternates country-name and flag prompts.`
+                    : `Includes mastered countries from ${region === "All" ? "every region" : region} and alternates both directions.`}
               </p>
             </aside>
           </section>
