@@ -40,6 +40,7 @@ test("keeps account progress behind authenticated server storage", async () => {
   assert.match(mapClient, /map-country \$\{active \? "active" : "inactive"\}/);
   assert.match(mapClient, /onPointerMove/);
   assert.match(mapClient, /onWheel/);
+  assert.ok(mapClient.indexOf("setPointerCapture") > mapClient.indexOf("onPointerMove"), "pointer capture must start only after a drag, not on an ordinary country click");
   const map = JSON.parse(mapData);
   const countryCodes = new Set([...countriesSource.matchAll(/code: "([A-Z]{2})"/g)].map((match) => match[1]));
   assert.equal(map.features.length, 197);

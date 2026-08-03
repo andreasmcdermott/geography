@@ -161,7 +161,6 @@ function LoadedMapQuestionCard({ country, index, total, selectedCode, region, on
           }}
           onPointerDown={(event) => {
             if (event.button !== 0) return;
-            event.currentTarget.setPointerCapture(event.pointerId);
             dragRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, originX: viewport.x, originY: viewport.y, moved: false };
             setDragging(true);
           }}
@@ -171,7 +170,10 @@ function LoadedMapQuestionCard({ country, index, total, selectedCode, region, on
             const bounds = event.currentTarget.getBoundingClientRect();
             const dx = ((event.clientX - drag.x) / bounds.width) * 1000;
             const dy = ((event.clientY - drag.y) / bounds.height) * 560;
-            if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
+            if (Math.abs(dx) + Math.abs(dy) > 4 && !drag.moved) {
+              drag.moved = true;
+              event.currentTarget.setPointerCapture(event.pointerId);
+            }
             setViewport(constrain({ x: drag.originX + dx, y: drag.originY + dy, scale: viewport.scale }));
           }}
           onPointerUp={(event) => {
