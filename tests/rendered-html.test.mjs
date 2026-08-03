@@ -17,6 +17,8 @@ test("keeps account progress behind authenticated server storage", async () => {
   assert.match(client, /Saved to your account/);
   assert.match(client, /\/api\/progress/);
   assert.match(client, /\/flags\/\$\{code\.toLocaleLowerCase\(\)\}\.svg/);
+  assert.match(client, /label="Flag to identify"/);
+  assert.doesNotMatch(client, /label=\{`Flag of \$\{question\.country\.name\}`\}/);
   assert.match(route, /getChatGPTUser/);
   assert.match(route, /Authentication required/);
   assert.equal(JSON.parse(hosting).d1, "DB");

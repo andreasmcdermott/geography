@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable @next/next/no-img-element -- these are tiny self-hosted SVG study assets, not photographic content */
+
 import { useEffect, useMemo, useState } from "react";
 import { countries, Country } from "./countries";
 
@@ -392,7 +394,7 @@ function QuestionCard({ topic, quiz, onAnswer, onNext }: { topic: Topic; quiz: Q
     <section className="question-wrap">
       <div className="question-progress"><span style={{ width: `${((quiz.index + (answered ? 1 : 0)) / quiz.questions.length) * 100}%` }} /></div>
       <div className="question-kicker"><span>{topic === "flags" ? "Flag study" : "Capital study"}</span><i /> <span>{countryFirst ? "Country → answer" : "Answer → country"}</span></div>
-      {!countryFirst && topic === "flags" && <div className="question-flag"><FlagImage code={question.country.code} label={`Flag of ${question.country.name}`} /></div>}
+      {!countryFirst && topic === "flags" && <div className="question-flag"><FlagImage code={question.country.code} label="Flag to identify" /></div>}
       <h1>{prompt}</h1>
       <p className="question-hint">Choose the best answer.</p>
       <div className={`answer-grid ${topic === "flags" && countryFirst ? "flag-options" : ""}`}>
