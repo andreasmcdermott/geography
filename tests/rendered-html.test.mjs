@@ -35,7 +35,11 @@ test("keeps account progress behind authenticated server storage", async () => {
   assert.match(client, /map: \{\}/);
   assert.match(mapClient, /Find <em>\{country\.name\}<\/em> on the map/);
   assert.match(mapClient, /\/data\/world-map\.json/);
-  assert.match(mapClient, /Tiny countries are shown with a circular target/);
+  assert.match(mapClient, /Scroll or use the controls to zoom, then drag to pan/);
+  assert.match(mapClient, /Focus \$\{region\}/);
+  assert.match(mapClient, /map-country \$\{active \? "active" : "inactive"\}/);
+  assert.match(mapClient, /onPointerMove/);
+  assert.match(mapClient, /onWheel/);
   const map = JSON.parse(mapData);
   const countryCodes = new Set([...countriesSource.matchAll(/code: "([A-Z]{2})"/g)].map((match) => match[1]));
   assert.equal(map.features.length, 197);
