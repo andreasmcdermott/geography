@@ -4,8 +4,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { countries, Country } from "./countries";
+import MapQuestionCard from "./MapQuestionCard";
 
-type Topic = "flags" | "capitals";
+type Topic = "flags" | "capitals" | "map";
 type Direction = "country-to-answer" | "answer-to-country";
 type View = "learn" | "countries";
 type SyncStatus = "syncing" | "synced" | "local" | "error";
@@ -30,6 +31,7 @@ type Question = {
 
 type QuizState = {
   mode: QuizMode;
+  region: RegionFilter;
   questions: Question[];
   index: number;
   score: number;
@@ -38,13 +40,13 @@ type QuizState = {
 };
 
 const STORAGE_KEY = "wayfinder-geography-progress-v1";
-const emptyProgress: Progress = { flags: {}, capitals: {} };
+const emptyProgress: Progress = { flags: {}, capitals: {}, map: {} };
 const regionFilters: RegionFilter[] = ["All", "Africa", "Americas", "Asia", "Europe", "Oceania"];
 const quizLengths: QuizLength[] = [20, 30, 40, 50, "all"];
 
 function mergeProgress(local: Progress, remote: Progress): Progress {
-  const merged: Progress = { flags: {}, capitals: {} };
-  for (const topic of ["flags", "capitals"] as Topic[]) {
+  const merged: Progress = { flags: {}, capitals: {}, map: {} };
+  for (const topic of ["flags", "capitals", "map"] as Topic[]) {
     const codes = new Set([...Object.keys(local[topic] ?? {}), ...Object.keys(remote[topic] ?? {})]);
     for (const code of codes) {
       const localRecord = local[topic]?.[code];
@@ -65,10 +67,15 @@ function mergeProgress(local: Progress, remote: Progress): Progress {
   return merged;
 }
 
-function isProgress(value: unknown): value is Progress {
-  if (!value || typeof value !== "object") return false;
+function normalizeProgress(value: unknown): Progress | null {
+  if (!value || typeof value !== "object") return null;
   const candidate = value as Partial<Progress>;
-  return Boolean(candidate.flags && typeof candidate.flags === "object" && candidate.capitals && typeof candidate.capitals === "object");
+  if (!candidate.flags || typeof candidate.flags !== "object" || !candidate.capitals || typeof candidate.capitals !== "object") return null;
+  return {
+    flags: candidate.flags,
+    capitals: candidate.capitals,
+    map: candidate.map && typeof candidate.map === "object" ? candidate.map : {},
+  };
 }
 
 function shuffle<T>(items: T[]) {
@@ -94,10 +101,12 @@ function buildQuiz(topic: Topic, length: QuizLength, progress: Progress, mode: Q
   const pool = mode === "elimination" || length === "all" ? shuffled : shuffled.slice(0, Math.min(length, shuffled.length));
   const optionPool = mode === "region" ? regionalPool : countries;
   const eliminationAnswerOrder = mode === "elimination" ? shuffle(regionalPool) : [];
-  const firstDirection: Direction = Math.random() > 0.5 ? "country-to-answer" : "answer-to-country";
+  const firstDirection: Direction = topic === "map" || Math.random() > 0.5 ? "country-to-answer" : "answer-to-country";
 
   return pool.map((country, index) => {
-    const direction = index % 2 === 0
+    const direction = topic === "map"
+      ? "country-to-answer"
+      : index % 2 === 0
       ? firstDirection
       : firstDirection === "country-to-answer"
         ? "answer-to-country"
@@ -145,7 +154,8 @@ export default function QuizApp() {
       try {
         const stored = window.localStorage.getItem(STORAGE_KEY);
         const parsed = stored ? (JSON.parse(stored) as unknown) : null;
-        if (isProgress(parsed)) localProgress = parsed;
+        const normalized = normalizeProgress(parsed);
+        if (normalized) localProgress = normalized;
       } catch {
         // Keep a clean slate if browser storage is unavailable or malformed.
       }
@@ -160,7 +170,7 @@ export default function QuizApp() {
           }
           if (!response.ok) throw new Error("Progress could not be loaded");
           const payload = (await response.json()) as { progress?: unknown };
-          const remoteProgress = isProgress(payload.progress) ? payload.progress : emptyProgress;
+          const remoteProgress = normalizeProgress(payload.progress) ?? emptyProgress;
           const merged = mergeProgress(localProgress, remoteProgress);
           setProgress(merged);
 
@@ -222,14 +232,22 @@ export default function QuizApp() {
 
   function chooseTopic(nextTopic: Topic) {
     setTopic(nextTopic);
-    if (nextTopic === "capitals" && quizMode === "elimination") setQuizMode("region");
+    if (nextTopic !== "flags" && quizMode === "elimination") setQuizMode("region");
     setQuiz(null);
     setView("learn");
   }
 
   function startQuiz() {
     const questions = buildQuiz(topic, quizLength, progress, quizMode, region);
-    setQuiz({ mode: quizMode, questions, index: 0, score: 0, selectedCode: null, complete: questions.length === 0 });
+    setQuiz({
+      mode: quizMode,
+      region: quizMode === "adaptive" ? "All" : region,
+      questions,
+      index: 0,
+      score: 0,
+      selectedCode: null,
+      complete: questions.length === 0,
+    });
   }
 
   function answer(code: string) {
@@ -303,6 +321,16 @@ export default function QuizApp() {
             onAgain={startQuiz}
             onHome={() => setQuiz(null)}
           />
+        ) : topic === "map" ? (
+          <MapQuestionCard
+            country={quiz.questions[quiz.index].country}
+            index={quiz.index}
+            total={quiz.questions.length}
+            selectedCode={quiz.selectedCode}
+            region={quiz.region}
+            onAnswer={answer}
+            onNext={nextQuestion}
+          />
         ) : (
           <QuestionCard
             topic={topic}
@@ -367,6 +395,13 @@ export default function QuizApp() {
                   <strong>Place the<br />capital.</strong>
                   <small>Country ↔ Capital</small>
                 </button>
+                <button className={`topic-card map-card ${topic === "map" ? "selected" : ""}`} onClick={() => chooseTopic("map")}>
+                  <span className="selection-dot" aria-hidden="true" />
+                  <span className="card-label">Map</span>
+                  <span className="map-motif" aria-hidden="true"><i /><i /><i /></span>
+                  <strong>Find it.<br />Place it.</strong>
+                  <small>Country → Location</small>
+                </button>
               </div>
             </div>
 
@@ -422,8 +457,8 @@ export default function QuizApp() {
                       : quizMode === "elimination"
                         ? `Start ${region === "All" ? "world" : region} elimination quiz`
                         : quizMode === "region"
-                        ? `Start ${region === "All" ? "world" : region} ${topic === "flags" ? "flag" : "capital"} test`
-                        : `Start ${topic === "flags" ? "flag" : "capital"} quiz`}
+                        ? `Start ${region === "All" ? "world" : region} ${topic === "flags" ? "flag" : topic === "capitals" ? "capital" : "map"} test`
+                        : `Start ${topic === "flags" ? "flag" : topic === "capitals" ? "capital" : "map"} quiz`}
                 </span>
                 <b aria-hidden="true">↗</b>
               </button>
@@ -439,7 +474,7 @@ export default function QuizApp() {
           </section>
 
           <section className="progress-strip">
-            <div className="progress-title"><span>03</span><div><h2>Your {topic} progress</h2><p>{stats.attempts ? `${stats.accuracy}% accuracy across ${plural(stats.attempts, "answer")}` : "Your first answer starts the story."}</p></div></div>
+            <div className="progress-title"><span>03</span><div><h2>Your {topic === "map" ? "map" : topic} progress</h2><p>{stats.attempts ? `${stats.accuracy}% accuracy across ${plural(stats.attempts, "answer")}` : "Your first answer starts the story."}</p></div></div>
             <div className="mastery-meter">
               <div className="meter-label"><span>Mastered</span><strong>{stats.mastered} <small>/ {countries.length}</small></strong></div>
               <div className="meter-track"><span style={{ width: `${(stats.mastered / countries.length) * 100}%` }} /></div>
@@ -449,7 +484,7 @@ export default function QuizApp() {
           </section>
         </>
       )}
-      <footer><span>Made for curious minds.</span><a href="/licenses/flag-icons-MIT.txt">Flags by flag-icons · MIT</a><span>{countries.length} countries · Flags & capitals</span></footer>
+      <footer><span>Made for curious minds.</span><span><a href="/licenses/flag-icons-MIT.txt">Flags by flag-icons · MIT</a> · <a href="/licenses/natural-earth-public-domain.txt">Map by Natural Earth</a></span><span>{countries.length} countries · Flags, capitals & maps</span></footer>
     </main>
   );
 }

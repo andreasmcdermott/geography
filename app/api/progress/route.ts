@@ -1,7 +1,7 @@
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { getD1 } from "../../../db";
 
-type Topic = "flags" | "capitals";
+type Topic = "flags" | "capitals" | "map";
 
 type StoredRow = {
   topic: Topic;
@@ -19,10 +19,10 @@ type ProgressRecord = {
   mastered: boolean;
 };
 
-const topics: Topic[] = ["flags", "capitals"];
+const topics: Topic[] = ["flags", "capitals", "map"];
 
 function isTopic(value: unknown): value is Topic {
-  return value === "flags" || value === "capitals";
+  return value === "flags" || value === "capitals" || value === "map";
 }
 
 function isCountryCode(value: unknown): value is string {
@@ -74,7 +74,7 @@ export async function GET() {
     .bind(auth.email)
     .all<StoredRow>();
 
-  const progress: Record<Topic, Record<string, ProgressRecord>> = { flags: {}, capitals: {} };
+  const progress: Record<Topic, Record<string, ProgressRecord>> = { flags: {}, capitals: {}, map: {} };
   for (const row of result.results) {
     if (isTopic(row.topic) && isCountryCode(row.country_code)) {
       progress[row.topic][row.country_code] = rowToRecord(row);
