@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { countries, Country, flagEmoji } from "./countries";
+import { countries, Country } from "./countries";
 
 type Topic = "flags" | "capitals";
 type Direction = "country-to-answer" | "answer-to-country";
@@ -98,6 +98,17 @@ function plural(value: number, word: string) {
   return `${value} ${word}${value === 1 ? "" : "s"}`;
 }
 
+function FlagImage({ code, label, className = "" }: { code: string; label?: string; className?: string }) {
+  return (
+    <img
+      className={`flag-image ${className}`}
+      src={`/flags/${code.toLocaleLowerCase()}.svg`}
+      alt={label ?? ""}
+      draggable={false}
+    />
+  );
+}
+
 export default function QuizApp() {
   const [topic, setTopic] = useState<Topic>("flags");
   const [view, setView] = useState<View>("learn");
@@ -120,7 +131,30 @@ export default function QuizApp() {
       }
       setProgress(localProgress);
       setHydrated(true);
-      void syncAccountProgress(localProgress);
+      void (async () => {
+        try {
+          const response = await fetch("/api/progress", { headers: { Accept: "application/json" } });
+          if (response.status === 401) {
+            setSyncStatus("local");
+            return;
+          }
+          if (!response.ok) throw new Error("Progress could not be loaded");
+          const payload = (await response.json()) as { progress?: unknown };
+          const remoteProgress = isProgress(payload.progress) ? payload.progress : emptyProgress;
+          const merged = mergeProgress(localProgress, remoteProgress);
+          setProgress(merged);
+
+          const saveResponse = await fetch("/api/progress", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ progress: merged }),
+          });
+          if (!saveResponse.ok) throw new Error("Progress could not be merged");
+          setSyncStatus("synced");
+        } catch {
+          setSyncStatus("error");
+        }
+      })();
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
@@ -129,31 +163,6 @@ export default function QuizApp() {
     if (!hydrated) return;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
   }, [progress, hydrated]);
-
-  async function syncAccountProgress(localProgress: Progress) {
-    try {
-      const response = await fetch("/api/progress", { headers: { Accept: "application/json" } });
-      if (response.status === 401) {
-        setSyncStatus("local");
-        return;
-      }
-      if (!response.ok) throw new Error("Progress could not be loaded");
-      const payload = (await response.json()) as { progress?: unknown };
-      const remoteProgress = isProgress(payload.progress) ? payload.progress : emptyProgress;
-      const merged = mergeProgress(localProgress, remoteProgress);
-      setProgress(merged);
-
-      const saveResponse = await fetch("/api/progress", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ progress: merged }),
-      });
-      if (!saveResponse.ok) throw new Error("Progress could not be merged");
-      setSyncStatus("synced");
-    } catch {
-      setSyncStatus("error");
-    }
-  }
 
   async function syncAnswer(topicName: Topic, countryCode: string, correctAnswer: boolean) {
     try {
@@ -317,7 +326,7 @@ export default function QuizApp() {
                   <span className="selection-dot" aria-hidden="true" />
                   <span className="card-label">Flags</span>
                   <span className="flag-stack" aria-hidden="true">
-                    <b>{flagEmoji("JP")}</b><b>{flagEmoji("BR")}</b><b>{flagEmoji("KE")}</b>
+                    <b><FlagImage code="JP" /></b><b><FlagImage code="BR" /></b><b><FlagImage code="KE" /></b>
                   </span>
                   <strong>See it.<br />Name it.</strong>
                   <small>Country ↔ Flag</small>
@@ -365,7 +374,7 @@ export default function QuizApp() {
           </section>
         </>
       )}
-      <footer><span>Made for curious minds.</span><span>{countries.length} countries · Flags & capitals</span></footer>
+      <footer><span>Made for curious minds.</span><a href="/licenses/flag-icons-MIT.txt">Flags by flag-icons · MIT</a><span>{countries.length} countries · Flags & capitals</span></footer>
     </main>
   );
 }
@@ -383,7 +392,7 @@ function QuestionCard({ topic, quiz, onAnswer, onNext }: { topic: Topic; quiz: Q
     <section className="question-wrap">
       <div className="question-progress"><span style={{ width: `${((quiz.index + (answered ? 1 : 0)) / quiz.questions.length) * 100}%` }} /></div>
       <div className="question-kicker"><span>{topic === "flags" ? "Flag study" : "Capital study"}</span><i /> <span>{countryFirst ? "Country → answer" : "Answer → country"}</span></div>
-      {!countryFirst && topic === "flags" && <div className="question-flag" role="img" aria-label={`Flag of ${question.country.name}`}>{flagEmoji(question.country.code)}</div>}
+      {!countryFirst && topic === "flags" && <div className="question-flag"><FlagImage code={question.country.code} label={`Flag of ${question.country.name}`} /></div>}
       <h1>{prompt}</h1>
       <p className="question-hint">Choose the best answer.</p>
       <div className={`answer-grid ${topic === "flags" && countryFirst ? "flag-options" : ""}`}>
@@ -400,7 +409,7 @@ function QuestionCard({ topic, quiz, onAnswer, onNext }: { topic: Topic; quiz: Q
             >
               <span className="answer-key">{String.fromCharCode(65 + index)}</span>
               {topic === "flags" && countryFirst ? (
-                <span className="answer-flag" role="img" aria-label={`Flag option ${index + 1}`}>{flagEmoji(option.code)}</span>
+                <FlagImage code={option.code} label={`Flag option ${index + 1}`} className="answer-flag" />
               ) : (
                 <span className="answer-text">{countryFirst ? option.capital : option.name}</span>
               )}
@@ -412,7 +421,7 @@ function QuestionCard({ topic, quiz, onAnswer, onNext }: { topic: Topic; quiz: Q
       </div>
       {answered && (
         <div className={`feedback ${isCorrect ? "success" : "error"}`} role="status">
-          <div><strong>{isCorrect ? "That’s right." : "Not quite."}</strong><span>{flagEmoji(question.country.code)} {question.country.name} · {question.country.capital}</span></div>
+          <div><strong>{isCorrect ? "That’s right." : "Not quite."}</strong><span><FlagImage code={question.country.code} /> {question.country.name} · {question.country.capital}</span></div>
           <button onClick={onNext}>{quiz.index === quiz.questions.length - 1 ? "See results" : "Next question"} <span>→</span></button>
         </div>
       )}
@@ -448,7 +457,7 @@ function CountryLibrary({ search, onSearch, progress, topic }: { search: string;
       <div className="country-grid">
         {filtered.map((country) => {
           const record = progress[topic][country.code];
-          return <article className="country-row" key={country.code}><span className="library-flag" role="img" aria-label={`Flag of ${country.name}`}>{flagEmoji(country.code)}</span><div><strong>{country.name}</strong><span>{country.region}</span></div><p>{country.capital}</p><span className={`status-pill ${record?.mastered ? "mastered" : record?.attempts ? "learning" : "new"}`}>{record?.mastered ? "Mastered" : record?.attempts ? `${record.streak}/3 streak` : "New"}</span></article>;
+          return <article className="country-row" key={country.code}><FlagImage code={country.code} label={`Flag of ${country.name}`} className="library-flag" /><div><strong>{country.name}</strong><span>{country.region}</span></div><p>{country.capital}</p><span className={`status-pill ${record?.mastered ? "mastered" : record?.attempts ? "learning" : "new"}`}>{record?.mastered ? "Mastered" : record?.attempts ? `${record.streak}/3 streak` : "New"}</span></article>;
         })}
       </div>
       {filtered.length === 0 && <div className="empty-state">No countries match “{search}”.</div>}

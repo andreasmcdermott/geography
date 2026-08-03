@@ -15,7 +15,8 @@ test("keeps account progress behind authenticated server storage", async () => {
 
   assert.match(page, /<QuizApp\s*\/>/);
   assert.match(client, /Saved to your account/);
-  assert.match(client, /syncAccountProgress/);
+  assert.match(client, /\/api\/progress/);
+  assert.match(client, /\/flags\/\$\{code\.toLocaleLowerCase\(\)\}\.svg/);
   assert.match(route, /getChatGPTUser/);
   assert.match(route, /Authentication required/);
   assert.equal(JSON.parse(hosting).d1, "DB");

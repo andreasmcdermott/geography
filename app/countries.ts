@@ -204,11 +204,3 @@ export const countries: Country[] = [
   { code: "ZM", name: "Zambia", capital: "Lusaka", region: "Africa" },
   { code: "ZW", name: "Zimbabwe", capital: "Harare", region: "Africa" },
 ];
-
-export function flagEmoji(code: string) {
-  return code
-    .toUpperCase()
-    .split("")
-    .map((char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
-    .join("");
-}
