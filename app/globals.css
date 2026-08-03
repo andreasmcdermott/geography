@@ -44,6 +44,9 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(53, 105, 202
 .main-nav button.active::after { content: ""; position: absolute; bottom: -1px; height: 3px; background: var(--ink); left: 3px; right: 3px; }
 .device-note { justify-self: end; font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
 .device-note span { color: #50a85a; font-size: 8px; }
+.device-note.syncing span { color: #d68a36; }
+.device-note.local span { color: #82908a; }
+.device-note.error span { color: #c86648; }
 
 .hero { padding: 70px 0 64px; display: grid; grid-template-columns: 1.2fr .8fr; align-items: end; gap: 6vw; }
 .eyebrow { margin: 0 0 18px; font: 650 11px/1 var(--font-geist-mono), monospace; letter-spacing: .15em; text-transform: uppercase; color: var(--teal); }

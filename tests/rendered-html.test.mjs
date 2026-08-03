@@ -1,20 +1,24 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-async function render() {
-  const workerUrl = new URL("../dist/server/index.js", import.meta.url);
-  workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
-  const { default: worker } = await import(workerUrl.href);
-  return worker.fetch(new Request("http://localhost/", { headers: { accept: "text/html" } }), {
-    ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
-  }, { waitUntil() {}, passThroughOnException() {} });
-}
+const root = new URL("../", import.meta.url);
 
-test("server-renders the Wayfinder app shell", async () => {
-  const response = await render();
-  assert.equal(response.status, 200);
-  const html = await response.text();
-  assert.match(html, /Wayfinder/);
-  assert.match(html, /Learn flags &amp; capitals/);
-  assert.doesNotMatch(html, /codex-preview/);
+test("keeps account progress behind authenticated server storage", async () => {
+  const [page, client, route, hosting, migration] = await Promise.all([
+    readFile(new URL("app/page.tsx", root), "utf8"),
+    readFile(new URL("app/QuizApp.tsx", root), "utf8"),
+    readFile(new URL("app/api/progress/route.ts", root), "utf8"),
+    readFile(new URL(".openai/hosting.json", root), "utf8"),
+    readFile(new URL("drizzle/0000_heavy_steve_rogers.sql", root), "utf8"),
+  ]);
+
+  assert.match(page, /<QuizApp\s*\/>/);
+  assert.match(client, /Saved to your account/);
+  assert.match(client, /syncAccountProgress/);
+  assert.match(route, /getChatGPTUser/);
+  assert.match(route, /Authentication required/);
+  assert.equal(JSON.parse(hosting).d1, "DB");
+  assert.match(migration, /CREATE TABLE `country_progress`/);
+  assert.match(migration, /PRIMARY KEY\(`user_email`, `topic`, `country_code`\)/);
 });

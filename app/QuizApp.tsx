@@ -6,6 +6,7 @@ import { countries, Country, flagEmoji } from "./countries";
 type Topic = "flags" | "capitals";
 type Direction = "country-to-answer" | "answer-to-country";
 type View = "learn" | "countries";
+type SyncStatus = "syncing" | "synced" | "local" | "error";
 
 type CountryProgress = {
   attempts: number;
@@ -32,6 +33,35 @@ type QuizState = {
 
 const STORAGE_KEY = "wayfinder-geography-progress-v1";
 const emptyProgress: Progress = { flags: {}, capitals: {} };
+
+function mergeProgress(local: Progress, remote: Progress): Progress {
+  const merged: Progress = { flags: {}, capitals: {} };
+  for (const topic of ["flags", "capitals"] as Topic[]) {
+    const codes = new Set([...Object.keys(local[topic] ?? {}), ...Object.keys(remote[topic] ?? {})]);
+    for (const code of codes) {
+      const localRecord = local[topic]?.[code];
+      const remoteRecord = remote[topic]?.[code];
+      if (!localRecord && remoteRecord) merged[topic][code] = remoteRecord;
+      else if (!remoteRecord && localRecord) merged[topic][code] = localRecord;
+      else {
+        if (!localRecord || !remoteRecord) continue;
+        merged[topic][code] = {
+          attempts: Math.max(localRecord.attempts, remoteRecord.attempts),
+          correct: Math.max(localRecord.correct, remoteRecord.correct),
+          streak: Math.max(localRecord.streak, remoteRecord.streak),
+          mastered: localRecord.mastered || remoteRecord.mastered,
+        };
+      }
+    }
+  }
+  return merged;
+}
+
+function isProgress(value: unknown): value is Progress {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<Progress>;
+  return Boolean(candidate.flags && typeof candidate.flags === "object" && candidate.capitals && typeof candidate.capitals === "object");
+}
 
 function shuffle<T>(items: T[]) {
   const copy = [...items];
@@ -76,16 +106,21 @@ export default function QuizApp() {
   const [hydrated, setHydrated] = useState(false);
   const [quiz, setQuiz] = useState<QuizState | null>(null);
   const [search, setSearch] = useState("");
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>("syncing");
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
+      let localProgress = emptyProgress;
       try {
         const stored = window.localStorage.getItem(STORAGE_KEY);
-        if (stored) setProgress(JSON.parse(stored) as Progress);
+        const parsed = stored ? (JSON.parse(stored) as unknown) : null;
+        if (isProgress(parsed)) localProgress = parsed;
       } catch {
         // Keep a clean slate if browser storage is unavailable or malformed.
       }
+      setProgress(localProgress);
       setHydrated(true);
+      void syncAccountProgress(localProgress);
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
@@ -94,6 +129,52 @@ export default function QuizApp() {
     if (!hydrated) return;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
   }, [progress, hydrated]);
+
+  async function syncAccountProgress(localProgress: Progress) {
+    try {
+      const response = await fetch("/api/progress", { headers: { Accept: "application/json" } });
+      if (response.status === 401) {
+        setSyncStatus("local");
+        return;
+      }
+      if (!response.ok) throw new Error("Progress could not be loaded");
+      const payload = (await response.json()) as { progress?: unknown };
+      const remoteProgress = isProgress(payload.progress) ? payload.progress : emptyProgress;
+      const merged = mergeProgress(localProgress, remoteProgress);
+      setProgress(merged);
+
+      const saveResponse = await fetch("/api/progress", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ progress: merged }),
+      });
+      if (!saveResponse.ok) throw new Error("Progress could not be merged");
+      setSyncStatus("synced");
+    } catch {
+      setSyncStatus("error");
+    }
+  }
+
+  async function syncAnswer(topicName: Topic, countryCode: string, correctAnswer: boolean) {
+    try {
+      const response = await fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: topicName, countryCode, correct: correctAnswer }),
+      });
+      if (!response.ok) throw new Error("Answer could not be saved");
+      const payload = (await response.json()) as { record?: CountryProgress | null };
+      if (payload.record) {
+        setProgress((current) => ({
+          ...current,
+          [topicName]: { ...current[topicName], [countryCode]: payload.record as CountryProgress },
+        }));
+      }
+      setSyncStatus("synced");
+    } catch {
+      setSyncStatus("error");
+    }
+  }
 
   const stats = useMemo(() => {
     const topicProgress = progress[topic];
@@ -136,6 +217,7 @@ export default function QuizApp() {
         },
       };
     });
+    void syncAnswer(topic, question.country.code, isCorrect);
   }
 
   function nextQuestion() {
@@ -144,10 +226,18 @@ export default function QuizApp() {
     setQuiz(atEnd ? { ...quiz, complete: true } : { ...quiz, index: quiz.index + 1, selectedCode: null });
   }
 
-  function resetTopic() {
-    if (!window.confirm(`Reset all ${topic} progress on this device?`)) return;
-    setProgress((current) => ({ ...current, [topic]: {} }));
-    setQuiz(null);
+  async function resetTopic() {
+    if (!window.confirm(`Reset all ${topic} progress on every device?`)) return;
+    setSyncStatus("syncing");
+    try {
+      const response = await fetch(`/api/progress?topic=${topic}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Progress could not be reset");
+      setProgress((current) => ({ ...current, [topic]: {} }));
+      setQuiz(null);
+      setSyncStatus("synced");
+    } catch {
+      setSyncStatus("error");
+    }
   }
 
   if (quiz) {
@@ -198,7 +288,10 @@ export default function QuizApp() {
           <button className={view === "learn" ? "active" : ""} onClick={() => setView("learn")}>Learn</button>
           <button className={view === "countries" ? "active" : ""} onClick={() => setView("countries")}>All countries</button>
         </nav>
-        <div className="device-note"><span aria-hidden="true">●</span> Saved on this device</div>
+        <div className={`device-note ${syncStatus}`} role="status">
+          <span aria-hidden="true">●</span>
+          {syncStatus === "synced" ? "Saved to your account" : syncStatus === "syncing" ? "Syncing progress…" : syncStatus === "local" ? "Saved on this device" : "Account sync paused"}
+        </div>
       </header>
 
       {view === "countries" ? (
@@ -253,8 +346,8 @@ export default function QuizApp() {
                 <div><span>Today’s set</span><strong>{Math.min(quizLength, stats.remaining)}</strong><small>questions</small></div>
                 <div><span>Still learning</span><strong>{stats.remaining}</strong><small>countries</small></div>
               </div>
-              <button className="start-button" onClick={startQuiz} disabled={stats.remaining === 0}>
-                <span>{stats.remaining === 0 ? "Set mastered" : `Start ${topic === "flags" ? "flag" : "capital"} quiz`}</span>
+              <button className="start-button" onClick={startQuiz} disabled={stats.remaining === 0 || syncStatus === "syncing"}>
+                <span>{syncStatus === "syncing" ? "Syncing progress…" : stats.remaining === 0 ? "Set mastered" : `Start ${topic === "flags" ? "flag" : "capital"} quiz`}</span>
                 <b aria-hidden="true">↗</b>
               </button>
               <p className="adaptive-note"><span aria-hidden="true">✦</span> Questions alternate direction and retire after a 3-answer streak.</p>
@@ -268,7 +361,7 @@ export default function QuizApp() {
               <div className="meter-track"><span style={{ width: `${(stats.mastered / countries.length) * 100}%` }} /></div>
             </div>
             <button className="text-button" onClick={() => setView("countries")}>View country library <span>→</span></button>
-            {stats.attempts > 0 && <button className="reset-button" onClick={resetTopic}>Reset {topic}</button>}
+            {stats.attempts > 0 && <button className="reset-button" onClick={() => void resetTopic()}>Reset {topic}</button>}
           </section>
         </>
       )}
