@@ -9,6 +9,9 @@ type Topic = "flags" | "capitals";
 type Direction = "country-to-answer" | "answer-to-country";
 type View = "learn" | "countries";
 type SyncStatus = "syncing" | "synced" | "local" | "error";
+type QuizMode = "adaptive" | "region";
+type RegionFilter = "All" | "Africa" | "Americas" | "Asia" | "Europe" | "Oceania";
+type QuizLength = 20 | 30 | 40 | 50 | "all";
 
 type CountryProgress = {
   attempts: number;
@@ -35,6 +38,8 @@ type QuizState = {
 
 const STORAGE_KEY = "wayfinder-geography-progress-v1";
 const emptyProgress: Progress = { flags: {}, capitals: {} };
+const regionFilters: RegionFilter[] = ["All", "Africa", "Americas", "Asia", "Europe", "Oceania"];
+const quizLengths: QuizLength[] = [20, 30, 40, 50, "all"];
 
 function mergeProgress(local: Progress, remote: Progress): Progress {
   const merged: Progress = { flags: {}, capitals: {} };
@@ -74,14 +79,19 @@ function shuffle<T>(items: T[]) {
   return copy;
 }
 
-function makeQuestion(country: Country, direction: Direction): Question {
-  const distractors = shuffle(countries.filter((item) => item.code !== country.code)).slice(0, 3);
+function makeQuestion(country: Country, direction: Direction, optionPool = countries): Question {
+  const distractors = shuffle(optionPool.filter((item) => item.code !== country.code)).slice(0, 3);
   return { country, direction, options: shuffle([country, ...distractors]) };
 }
 
-function buildQuiz(topic: Topic, length: number, progress: Progress): Question[] {
-  const available = countries.filter((country) => !progress[topic][country.code]?.mastered);
-  const pool = shuffle(available).slice(0, Math.min(length, available.length));
+function buildQuiz(topic: Topic, length: QuizLength, progress: Progress, mode: QuizMode, region: RegionFilter): Question[] {
+  const regionalPool = region === "All" ? countries : countries.filter((country) => country.region === region);
+  const available = mode === "adaptive"
+    ? countries.filter((country) => !progress[topic][country.code]?.mastered)
+    : regionalPool;
+  const shuffled = shuffle(available);
+  const pool = length === "all" ? shuffled : shuffled.slice(0, Math.min(length, shuffled.length));
+  const optionPool = mode === "region" ? regionalPool : countries;
   const firstDirection: Direction = Math.random() > 0.5 ? "country-to-answer" : "answer-to-country";
 
   return pool.map((country, index) =>
@@ -92,6 +102,7 @@ function buildQuiz(topic: Topic, length: number, progress: Progress): Question[]
         : firstDirection === "country-to-answer"
           ? "answer-to-country"
           : "country-to-answer",
+      optionPool,
     ),
   );
 }
@@ -114,7 +125,9 @@ function FlagImage({ code, label, className = "" }: { code: string; label?: stri
 export default function QuizApp() {
   const [topic, setTopic] = useState<Topic>("flags");
   const [view, setView] = useState<View>("learn");
-  const [quizLength, setQuizLength] = useState(20);
+  const [quizMode, setQuizMode] = useState<QuizMode>("adaptive");
+  const [region, setRegion] = useState<RegionFilter>("All");
+  const [quizLength, setQuizLength] = useState<QuizLength>(20);
   const [progress, setProgress] = useState<Progress>(emptyProgress);
   const [hydrated, setHydrated] = useState(false);
   const [quiz, setQuiz] = useState<QuizState | null>(null);
@@ -195,6 +208,13 @@ export default function QuizApp() {
     return { mastered, remaining: countries.length - mastered, attempts, accuracy: attempts ? Math.round((correct / attempts) * 100) : 0 };
   }, [progress, topic]);
 
+  const availableCount = useMemo(() => {
+    if (quizMode === "adaptive") return stats.remaining;
+    return region === "All" ? countries.length : countries.filter((country) => country.region === region).length;
+  }, [quizMode, region, stats.remaining]);
+
+  const sessionCount = quizLength === "all" ? availableCount : Math.min(quizLength, availableCount);
+
   function chooseTopic(nextTopic: Topic) {
     setTopic(nextTopic);
     setQuiz(null);
@@ -202,7 +222,7 @@ export default function QuizApp() {
   }
 
   function startQuiz() {
-    const questions = buildQuiz(topic, quizLength, progress);
+    const questions = buildQuiz(topic, quizLength, progress, quizMode, region);
     setQuiz({ questions, index: 0, score: 0, selectedCode: null, complete: questions.length === 0 });
   }
 
@@ -346,22 +366,57 @@ export default function QuizApp() {
             <aside className="session-panel">
               <div className="section-heading">
                 <span>02</span>
-                <div><h2>Set your pace</h2><p>How many questions today?</p></div>
+                <div>
+                  <h2>{quizMode === "adaptive" ? "Set your pace" : "Build a region test"}</h2>
+                  <p>{quizMode === "adaptive" ? "Mastered countries stay retired." : "Mastery is ignored in test mode."}</p>
+                </div>
               </div>
+              <div className="mode-picker" role="group" aria-label="Quiz mode">
+                <button className={quizMode === "adaptive" ? "active" : ""} onClick={() => setQuizMode("adaptive")} aria-pressed={quizMode === "adaptive"}>
+                  <strong>Adaptive</strong><span>Learn what’s left</span>
+                </button>
+                <button className={quizMode === "region" ? "active" : ""} onClick={() => setQuizMode("region")} aria-pressed={quizMode === "region"}>
+                  <strong>Region test</strong><span>Include everything</span>
+                </button>
+              </div>
+              {quizMode === "region" && (
+                <div className="region-picker" role="group" aria-label="Region">
+                  {regionFilters.map((item) => (
+                    <button key={item} className={region === item ? "active" : ""} onClick={() => setRegion(item)} aria-pressed={region === item}>
+                      {item === "All" ? "All regions" : item}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="length-picker" role="group" aria-label="Quiz length">
-                {[20, 30, 40, 50].map((length) => (
-                  <button key={length} className={quizLength === length ? "active" : ""} onClick={() => setQuizLength(length)}>{length}</button>
+                {quizLengths.map((length) => (
+                  <button key={length} className={quizLength === length ? "active" : ""} onClick={() => setQuizLength(length)} aria-pressed={quizLength === length}>
+                    {length === "all" ? "All" : length}
+                  </button>
                 ))}
               </div>
               <div className="session-summary">
-                <div><span>Today’s set</span><strong>{Math.min(quizLength, stats.remaining)}</strong><small>questions</small></div>
-                <div><span>Still learning</span><strong>{stats.remaining}</strong><small>countries</small></div>
+                <div><span>Today’s set</span><strong>{sessionCount}</strong><small>questions</small></div>
+                <div><span>{quizMode === "adaptive" ? "Still learning" : "Available"}</span><strong>{availableCount}</strong><small>countries</small></div>
               </div>
-              <button className="start-button" onClick={startQuiz} disabled={stats.remaining === 0 || syncStatus === "syncing"}>
-                <span>{syncStatus === "syncing" ? "Syncing progress…" : stats.remaining === 0 ? "Set mastered" : `Start ${topic === "flags" ? "flag" : "capital"} quiz`}</span>
+              <button className="start-button" onClick={startQuiz} disabled={availableCount === 0 || syncStatus === "syncing"}>
+                <span>
+                  {syncStatus === "syncing"
+                    ? "Syncing progress…"
+                    : availableCount === 0
+                      ? "Set mastered"
+                      : quizMode === "region"
+                        ? `Start ${region === "All" ? "world" : region} ${topic === "flags" ? "flag" : "capital"} test`
+                        : `Start ${topic === "flags" ? "flag" : "capital"} quiz`}
+                </span>
                 <b aria-hidden="true">↗</b>
               </button>
-              <p className="adaptive-note"><span aria-hidden="true">✦</span> Questions alternate direction and retire after a 3-answer streak.</p>
+              <p className="adaptive-note">
+                <span aria-hidden="true">✦</span>
+                {quizMode === "adaptive"
+                  ? "Questions alternate direction and retire after a 3-answer streak."
+                  : `Includes mastered countries from ${region === "All" ? "every region" : region} and alternates both directions.`}
+              </p>
             </aside>
           </section>
 

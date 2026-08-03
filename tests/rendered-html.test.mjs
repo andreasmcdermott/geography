@@ -19,6 +19,11 @@ test("keeps account progress behind authenticated server storage", async () => {
   assert.match(client, /\/flags\/\$\{code\.toLocaleLowerCase\(\)\}\.svg/);
   assert.match(client, /label="Flag to identify"/);
   assert.doesNotMatch(client, /label=\{`Flag of \$\{question\.country\.name\}`\}/);
+  assert.match(client, /Region test/);
+  assert.match(client, /All regions/);
+  assert.match(client, /Mastery is ignored in test mode/);
+  assert.match(client, /quizLengths: QuizLength\[\] = \[20, 30, 40, 50, "all"\]/);
+  assert.match(client, /mode === "adaptive"[\s\S]*mastered/);
   assert.match(route, /getChatGPTUser/);
   assert.match(route, /Authentication required/);
   assert.equal(JSON.parse(hosting).d1, "DB");

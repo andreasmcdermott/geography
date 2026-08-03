@@ -83,7 +83,16 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(53, 105, 202
 .city-lines i:nth-child(2) { font-size: 32px; margin-right: 14px; -webkit-text-stroke: 1px var(--blue); color: transparent; }
 .city-lines i:nth-child(3) { font-size: 39px; margin-right: -3px; }
 
-.length-picker { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin: 28px 0 26px; }
+.mode-picker { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 24px 0 14px; }
+.mode-picker button { border: 1px solid var(--line); background: transparent; min-height: 58px; padding: 10px 12px; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 5px; }
+.mode-picker button strong { font-size: 12px; }
+.mode-picker button span { color: var(--muted); font-size: 9px; }
+.mode-picker button.active { background: var(--ink); color: white; border-color: var(--ink); }
+.mode-picker button.active span { color: rgba(255, 255, 255, .68); }
+.region-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.region-picker button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 7px 10px; color: var(--muted); cursor: pointer; font-size: 9px; }
+.region-picker button.active { background: var(--teal); border-color: var(--teal); color: white; }
+.length-picker { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin: 14px 0 20px; }
 .length-picker button { border: 1px solid var(--line); background: transparent; padding: 12px 6px; cursor: pointer; border-radius: 2px; font: 600 13px/1 var(--font-geist-mono), monospace; }
 .length-picker button.active { background: var(--ink); color: white; border-color: var(--ink); }
 .session-summary { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-bottom: 20px; }
