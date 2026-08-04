@@ -158,6 +158,10 @@ footer a:hover { color: var(--ink); }
 .map-prompt-flag + h1 { margin-top: 24px; }
 .question-wrap .question-flag + h1 { margin-top: 10px; }
 .question-hint { text-align: center; color: var(--muted); font-size: 12px; margin: 15px 0 31px; }
+.skip-question-row { display: flex; justify-content: flex-end; margin: -18px 0 16px; }
+.skip-question-row button { border: 0; border-bottom: 1px solid var(--ink); background: none; padding: 7px 0; cursor: pointer; color: var(--muted); font-size: 11px; }
+.skip-question-row button:hover { color: var(--ink); }
+.skip-question-row button span { margin-left: 10px; }
 .answer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; }
 .answer-grid button { min-height: 76px; border: 1px solid var(--line); background: var(--card); padding: 13px 52px 13px 16px; display: flex; align-items: center; gap: 20px; cursor: pointer; text-align: left; position: relative; transition: border-color .15s, transform .15s, background .15s; }
 .answer-grid button:hover:not(:disabled) { border-color: var(--ink); transform: translateY(-2px); }

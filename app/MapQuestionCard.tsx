@@ -24,8 +24,10 @@ type MapQuestionCardProps = {
   prompt: "country" | "flag";
   elimination: boolean;
   eliminatedCodes: string[];
+  canSkip: boolean;
   onAnswer: (code: string) => void;
   onNext: () => void;
+  onSkip: () => void;
 };
 
 const countryByCode = new Map(countries.map((country) => [country.code, country]));
@@ -68,7 +70,7 @@ export default function MapQuestionCard(props: MapQuestionCardProps) {
   return <LoadedMapQuestionCard {...props} featureCollection={featureCollection} />;
 }
 
-function LoadedMapQuestionCard({ country, index, total, selectedCode, region, prompt, elimination, eliminatedCodes, onAnswer, onNext, featureCollection }: MapQuestionCardProps & { featureCollection: FeatureCollection<MultiPolygon, MapProperties> }) {
+function LoadedMapQuestionCard({ country, index, total, selectedCode, region, prompt, elimination, eliminatedCodes, canSkip, onAnswer, onNext, onSkip, featureCollection }: MapQuestionCardProps & { featureCollection: FeatureCollection<MultiPolygon, MapProperties> }) {
   const answered = selectedCode !== null;
   const isCorrect = selectedCode === country.code;
   const [viewport, setViewport] = useState<MapViewport>({ x: 0, y: 0, scale: 1 });
@@ -152,6 +154,7 @@ function LoadedMapQuestionCard({ country, index, total, selectedCode, region, pr
         ? <h1>Find this flag’s country on the map.</h1>
         : <h1>Find <em>{country.name}</em> on the map.</h1>}
       <p className="question-hint">{elimination ? `${activeCodes.size} unused locations remain. ` : ""}Select the country’s location. Scroll or use the controls to zoom, then drag to pan.</p>
+      {canSkip && <div className="skip-question-row"><button onClick={onSkip}>Skip for now <span>→</span></button></div>}
 
       <div className="map-frame">
         <div className="map-controls" role="group" aria-label="Map controls">

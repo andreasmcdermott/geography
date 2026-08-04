@@ -116,8 +116,7 @@ function buildQuiz(topic: Topic, length: QuizLength, progress: Progress, mode: Q
         : "country-to-answer";
 
     if (mode === "elimination") {
-      const usedCodes = new Set(pool.slice(0, index).map((item) => item.code));
-      return { country, direction, options: eliminationAnswerOrder.filter((item) => !usedCodes.has(item.code)) };
+      return { country, direction, options: eliminationAnswerOrder };
     }
 
     return makeQuestion(country, direction, optionPool);
@@ -315,6 +314,16 @@ export default function QuizApp() {
     setQuiz(atEnd ? { ...quiz, complete: true } : { ...quiz, index: quiz.index + 1, selectedCode: null });
   }
 
+  function skipQuestion() {
+    if (!quiz || quiz.mode !== "elimination" || quiz.eliminationStyle !== "guided" || quiz.selectedCode || quiz.index >= quiz.questions.length - 1) return;
+    const completed = quiz.questions.slice(0, quiz.index);
+    const remaining = quiz.questions.slice(quiz.index);
+    const [skipped, ...rest] = remaining;
+    const directionSlots = remaining.map((question) => question.direction);
+    const reordered = [...rest, skipped].map((question, index) => ({ ...question, direction: directionSlots[index] }));
+    setQuiz({ ...quiz, questions: [...completed, ...reordered] });
+  }
+
   async function resetTopic() {
     if (!window.confirm(`Reset all ${topic} progress on every device?`)) return;
     setSyncStatus("syncing");
@@ -373,8 +382,10 @@ export default function QuizApp() {
             prompt={quiz.questions[quiz.index].direction === "country-to-answer" ? "country" : "flag"}
             elimination={quiz.mode === "elimination"}
             eliminatedCodes={quiz.mode === "elimination" ? quiz.questions.slice(0, quiz.index).map((question) => question.country.code) : []}
+            canSkip={quiz.mode === "elimination" && quiz.eliminationStyle === "guided" && quiz.index < quiz.questions.length - 1 && !quiz.selectedCode}
             onAnswer={answer}
             onNext={nextQuestion}
+            onSkip={skipQuestion}
           />
         ) : (
           <QuestionCard
@@ -382,6 +393,7 @@ export default function QuizApp() {
             quiz={quiz}
             onAnswer={answer}
             onNext={nextQuestion}
+            onSkip={skipQuestion}
           />
         )}
       </main>
@@ -640,15 +652,18 @@ function FreePickQuiz({ boardCodes, remainingCodes, score, attempts, onAttempt }
   );
 }
 
-function QuestionCard({ topic, quiz, onAnswer, onNext }: { topic: Topic; quiz: QuizState; onAnswer: (code: string) => void; onNext: () => void }) {
+function QuestionCard({ topic, quiz, onAnswer, onNext, onSkip }: { topic: Topic; quiz: QuizState; onAnswer: (code: string) => void; onNext: () => void; onSkip: () => void }) {
   const question = quiz.questions[quiz.index];
   const answered = quiz.selectedCode !== null;
   const isCorrect = quiz.selectedCode === question.country.code;
   const countryFirst = question.direction === "country-to-answer";
   const isElimination = quiz.mode === "elimination";
+  const remainingCodes = new Set(quiz.questions.slice(quiz.index).map((item) => item.country.code));
+  const availableOptions = isElimination ? question.options.filter((option) => remainingCodes.has(option.code)) : question.options;
   const displayedOptions = isElimination && !countryFirst
-    ? [...question.options].sort((a, b) => a.name.localeCompare(b.name))
-    : question.options;
+    ? [...availableOptions].sort((a, b) => a.name.localeCompare(b.name))
+    : availableOptions;
+  const canSkip = isElimination && quiz.eliminationStyle === "guided" && !answered && quiz.index < quiz.questions.length - 1;
   const prompt = topic === "flags"
     ? countryFirst ? `Which flag belongs to ${question.country.name}?` : "Which country uses this flag?"
     : countryFirst ? `What is the capital of ${question.country.name}?` : `Which country has ${question.country.capital} as its capital?`;
@@ -659,7 +674,8 @@ function QuestionCard({ topic, quiz, onAnswer, onNext }: { topic: Topic; quiz: Q
       <div className="question-kicker"><span>{topic === "flags" ? "Flag study" : "Capital study"}</span><i /> <span>{countryFirst ? "Country → answer" : "Answer → country"}</span></div>
       {!countryFirst && topic === "flags" && <div className="question-flag"><FlagImage code={question.country.code} label="Flag to identify" /></div>}
       <h1>{prompt}</h1>
-      <p className="question-hint">{isElimination ? `${question.options.length} unused ${countryFirst ? "flags" : "countries"} remain.` : "Choose the best answer."}</p>
+      <p className="question-hint">{isElimination ? `${availableOptions.length} unused ${countryFirst ? "flags" : "countries"} remain.` : "Choose the best answer."}</p>
+      {canSkip && <div className="skip-question-row"><button onClick={onSkip}>Skip for now <span>→</span></button></div>}
       {answered && isElimination && <AnswerFeedback isCorrect={isCorrect} question={question} atEnd={quiz.index === quiz.questions.length - 1} onNext={onNext} floating />}
       <div className={`answer-grid ${topic === "flags" && countryFirst ? "flag-options" : ""} ${isElimination ? "elimination-options" : ""} ${isElimination && !countryFirst ? "country-options" : ""}`}>
         {displayedOptions.map((option, index) => {

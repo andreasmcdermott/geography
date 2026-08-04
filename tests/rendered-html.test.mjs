@@ -70,7 +70,13 @@ test("keeps account progress behind authenticated server storage", async () => {
   assert.doesNotMatch(client, /label=\{`Flag of \$\{selectedFlag\.name\}`\}/);
   assert.match(client, /freeRemainingCodes: questions\.map/);
   assert.match(client, /recordAnswer\("flags", flagCode, isCorrect\)/);
-  assert.match(client, /eliminationAnswerOrder\.filter\(\(item\) => !usedCodes\.has\(item\.code\)\)/);
+  assert.match(client, /return \{ country, direction, options: eliminationAnswerOrder \}/);
+  assert.match(client, /function skipQuestion\(\)/);
+  assert.match(client, /const \[skipped, \.\.\.rest\] = remaining/);
+  assert.match(client, /const reordered = \[\.\.\.rest, skipped\]\.map/);
+  assert.match(client, /question\.options\.filter\(\(option\) => remainingCodes\.has\(option\.code\)\)/);
+  assert.match(client, /Skip for now/);
+  assert.match(styles, /\.skip-question-row/);
   assert.match(client, /unused \$\{countryFirst \? "flags" : "countries"\} remain/);
   assert.match(client, /MapQuestionCard/);
   assert.match(client, /map: \{\}/);
@@ -85,6 +91,7 @@ test("keeps account progress behind authenticated server storage", async () => {
   assert.match(mapClient, /Map elimination/);
   assert.match(mapClient, /!eliminatedSet\.has\(item\.code\)/);
   assert.match(mapClient, /Remaining countries/);
+  assert.match(mapClient, /canSkip && <div className="skip-question-row">/);
   assert.match(mapClient, /onPointerMove/);
   assert.match(mapClient, /onWheel/);
   assert.ok(mapClient.indexOf("setPointerCapture") > mapClient.indexOf("onPointerMove"), "pointer capture must start only after a drag, not on an ordinary country click");
