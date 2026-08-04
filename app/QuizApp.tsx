@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element -- these are tiny self-hosted SVG study assets, not photographic content */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { countries, Country } from "./countries";
 import MapQuestionCard from "./MapQuestionCard";
 
@@ -542,7 +542,9 @@ export default function QuizApp() {
 function FreePickQuiz({ boardCodes, remainingCodes, score, attempts, onAttempt }: { boardCodes: string[]; remainingCodes: string[]; score: number; attempts: number; onAttempt: (flagCode: string, countryCode: string) => void }) {
   const [selectedFlag, setSelectedFlag] = useState<Country | null>(null);
   const [query, setQuery] = useState("");
-  const [result, setResult] = useState<{ chosen: Country; correct: boolean } | null>(null);
+  const [result, setResult] = useState<{ correct: boolean } | null>(null);
+  const [flagMarks, setFlagMarks] = useState<Record<string, { status: "correct" | "wrong"; attempt: number }>>({});
+  const returnTimer = useRef<number | null>(null);
   const remainingSet = useMemo(() => new Set(remainingCodes), [remainingCodes]);
   const remainingCountries = useMemo(
     () => remainingCodes.map((code) => countryLookup.get(code)).filter((country): country is Country => Boolean(country)).sort((a, b) => a.name.localeCompare(b.name)),
@@ -553,7 +555,13 @@ function FreePickQuiz({ boardCodes, remainingCodes, score, attempts, onAttempt }
     return normalized ? remainingCountries.filter((country) => country.name.toLocaleLowerCase().includes(normalized)) : remainingCountries;
   }, [query, remainingCountries]);
 
+  useEffect(() => () => {
+    if (returnTimer.current !== null) window.clearTimeout(returnTimer.current);
+  }, []);
+
   function returnToBoard() {
+    if (returnTimer.current !== null) window.clearTimeout(returnTimer.current);
+    returnTimer.current = null;
     setSelectedFlag(null);
     setResult(null);
     setQuery("");
@@ -562,8 +570,13 @@ function FreePickQuiz({ boardCodes, remainingCodes, score, attempts, onAttempt }
   function chooseCountry(country: Country) {
     if (!selectedFlag || result) return;
     const correct = selectedFlag.code === country.code;
-    setResult({ chosen: country, correct });
+    setResult({ correct });
+    setFlagMarks((current) => ({
+      ...current,
+      [selectedFlag.code]: { status: correct ? "correct" : "wrong", attempt: (current[selectedFlag.code]?.attempt ?? 0) + 1 },
+    }));
     onAttempt(selectedFlag.code, country.code);
+    returnTimer.current = window.setTimeout(returnToBoard, 650);
   }
 
   if (selectedFlag) {
@@ -573,30 +586,17 @@ function FreePickQuiz({ boardCodes, remainingCodes, score, attempts, onAttempt }
         <div className="question-kicker"><span>Free-pick elimination</span><i /><span>{remainingCodes.length} flags remaining</span></div>
         <div className="free-pick-selected"><FlagImage code={selectedFlag.code} label="Selected flag" /></div>
         <h1>Which country uses this flag?</h1>
-
-        {result ? (
-          <div className={`free-pick-result ${result.correct ? "success" : "error"}`} role="status">
-            <strong>{result.correct ? `Matched: ${selectedFlag.name}` : `${result.chosen.name} isn’t the match.`}</strong>
-            <p>{result.correct ? "This pair has been removed from the board." : "The flag stays on the board so you can return to it later."}</p>
-            <div>
-              {!result.correct && <button className="secondary-action" onClick={() => { setResult(null); setQuery(""); }}>Try this flag again</button>}
-              <button className="start-button" onClick={returnToBoard}><span>{result.correct ? "Choose another flag" : "Back to flag board"}</span><b>→</b></button>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="free-country-toolbar">
-              <label><span>Filter by country name</span><input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Start typing a country…" /></label>
-              <button className="quiet-button" onClick={returnToBoard}>Back to flags</button>
-            </div>
-            <div className="free-country-list" aria-label="Unused country choices">
-              {filteredCountries.map((country) => (
-                <button key={country.code} onClick={() => chooseCountry(country)}><strong>{country.name}</strong><span>{country.region}</span></button>
-              ))}
-            </div>
-            {filteredCountries.length === 0 && <div className="empty-state">No remaining countries match “{query}”.</div>}
-          </>
-        )}
+        {result && <div className={`free-answer-flash ${result.correct ? "success" : "error"}`} role="status"><span>{result.correct ? "✓" : "×"}</span></div>}
+        <div className="free-country-toolbar">
+          <label><span>Filter by country name</span><input autoFocus disabled={Boolean(result)} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Start typing a country…" /></label>
+          <button className="quiet-button" disabled={Boolean(result)} onClick={returnToBoard}>Back to flags</button>
+        </div>
+        <div className={`free-country-list ${result ? "locked" : ""}`} aria-label="Unused country choices">
+          {filteredCountries.map((country) => (
+            <button key={country.code} disabled={Boolean(result)} onClick={() => chooseCountry(country)}><strong>{country.name}</strong><span>{country.region}</span></button>
+          ))}
+        </div>
+        {filteredCountries.length === 0 && <div className="empty-state">No remaining countries match “{query}”.</div>}
       </section>
     );
   }
@@ -605,7 +605,7 @@ function FreePickQuiz({ boardCodes, remainingCodes, score, attempts, onAttempt }
     <section className="question-wrap free-pick-wrap">
       <div className="question-progress"><span style={{ width: `${(score / boardCodes.length) * 100}%` }} /></div>
       <div className="free-pick-board-heading">
-        <div><p className="eyebrow">Free-pick elimination</p><h1>Choose a flag you know.</h1><p>Correct pairs disappear. Empty spaces preserve every remaining flag’s position.</p></div>
+        <div><p className="eyebrow">Free-pick elimination</p><h1>Choose a flag you know.</h1><p>Matched flags stay faded in place. Incorrect flags remain available for later.</p></div>
         <div><strong>{remainingCodes.length}</strong><span>remaining</span><small>{attempts ? `${Math.round((score / attempts) * 100)}% accuracy` : "No attempts yet"}</small></div>
       </div>
       <div className="free-flag-board" aria-label={`${remainingCodes.length} unmatched flags`}>
@@ -613,9 +613,15 @@ function FreePickQuiz({ boardCodes, remainingCodes, score, attempts, onAttempt }
           const country = countryLookup.get(code);
           if (!country) return null;
           const matched = !remainingSet.has(code);
-          return matched ? <span className="matched-flag-slot" key={code} aria-hidden="true" /> : (
-            <button key={code} onClick={() => { setSelectedFlag(country); setQuery(""); setResult(null); }} aria-label={`Choose flag ${index + 1}`}>
+          const mark = flagMarks[code];
+          return matched ? (
+            <span className="matched-flag-slot" key={code} aria-label={`Flag ${index + 1} matched`}>
+              <FlagImage code={code} label={`Matched flag ${index + 1}`} /><b aria-hidden="true">✓</b>
+            </span>
+          ) : (
+            <button className={mark?.status === "wrong" ? "recent-wrong" : ""} key={`${code}-${mark?.attempt ?? 0}`} onClick={() => { setSelectedFlag(country); setQuery(""); setResult(null); }} aria-label={`Choose flag ${index + 1}`}>
               <FlagImage code={code} label={`Flag choice ${index + 1}`} />
+              {mark?.status === "wrong" && <b className="wrong-mark" aria-hidden="true">×</b>}
             </button>
           );
         })}

@@ -32,8 +32,12 @@ test("keeps account progress behind authenticated server storage", async () => {
   assert.match(client, /Free pick/);
   assert.match(client, /Choose any flag/);
   assert.match(client, /Filter by country name/);
-  assert.match(client, /Correct pairs disappear/);
+  assert.match(client, /Matched flags stay faded in place/);
   assert.match(client, /matched-flag-slot/);
+  assert.match(client, /free-answer-flash/);
+  assert.match(client, /window\.setTimeout\(returnToBoard, 650\)/);
+  assert.match(client, /recent-wrong/);
+  assert.doesNotMatch(client, /Choose another flag/);
   assert.match(client, /label=\{`Flag choice \$\{index \+ 1\}`\}/);
   assert.doesNotMatch(client, /label=\{`Flag of \$\{selectedFlag\.name\}`\}/);
   assert.match(client, /freeRemainingCodes: questions\.map/);
