@@ -29,6 +29,15 @@ test("keeps account progress behind authenticated server storage", async () => {
   assert.match(client, /mode === "adaptive"[\s\S]*mastered/);
   assert.match(client, /Elimination/);
   assert.match(client, /mode === "elimination"/);
+  assert.match(client, /Free pick/);
+  assert.match(client, /Choose any flag/);
+  assert.match(client, /Filter by country name/);
+  assert.match(client, /Correct pairs disappear/);
+  assert.match(client, /matched-flag-slot/);
+  assert.match(client, /label=\{`Flag choice \$\{index \+ 1\}`\}/);
+  assert.doesNotMatch(client, /label=\{`Flag of \$\{selectedFlag\.name\}`\}/);
+  assert.match(client, /freeRemainingCodes: questions\.map/);
+  assert.match(client, /recordAnswer\("flags", flagCode, isCorrect\)/);
   assert.match(client, /eliminationAnswerOrder\.filter\(\(item\) => !usedCodes\.has\(item\.code\)\)/);
   assert.match(client, /unused \$\{countryFirst \? "flags" : "countries"\} remain/);
   assert.match(client, /MapQuestionCard/);
