@@ -44,6 +44,11 @@ test("keeps account progress behind authenticated server storage", async () => {
   assert.match(client, /mode === "adaptive"[\s\S]*mastered/);
   assert.match(client, /Elimination/);
   assert.match(client, /mode === "elimination"/);
+  assert.match(client, /topic !== "capitals" && \(/);
+  assert.match(client, /nextTopic === "capitals" && quizMode === "elimination"/);
+  assert.match(client, /elimination=\{quiz\.mode === "elimination"\}/);
+  assert.match(client, /eliminatedCodes=\{quiz\.mode === "elimination" \? quiz\.questions\.slice\(0, quiz\.index\)/);
+  assert.match(client, /completed locations are removed from the clickable map/);
   assert.match(client, /Free pick/);
   assert.match(client, /Choose any flag/);
   assert.match(client, /Filter by country name/);
@@ -77,6 +82,9 @@ test("keeps account progress behind authenticated server storage", async () => {
   assert.match(mapClient, /Scroll or use the controls to zoom, then drag to pan/);
   assert.match(mapClient, /Focus \$\{region\}/);
   assert.match(mapClient, /map-country \$\{active \? "active" : "inactive"\}/);
+  assert.match(mapClient, /Map elimination/);
+  assert.match(mapClient, /!eliminatedSet\.has\(item\.code\)/);
+  assert.match(mapClient, /Remaining countries/);
   assert.match(mapClient, /onPointerMove/);
   assert.match(mapClient, /onWheel/);
   assert.ok(mapClient.indexOf("setPointerCapture") > mapClient.indexOf("onPointerMove"), "pointer capture must start only after a drag, not on an ordinary country click");

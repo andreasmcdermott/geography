@@ -240,10 +240,12 @@ export default function QuizApp() {
   }, [quizMode, region, stats.remaining]);
 
   const sessionCount = quizMode === "elimination" || quizLength === "all" ? availableCount : Math.min(quizLength, availableCount);
+  const freePickElimination = topic === "flags" && quizMode === "elimination" && eliminationStyle === "free";
 
   function chooseTopic(nextTopic: Topic) {
     setTopic(nextTopic);
-    if (nextTopic !== "flags" && quizMode === "elimination") setQuizMode("region");
+    if (nextTopic === "capitals" && quizMode === "elimination") setQuizMode("region");
+    if (nextTopic !== "flags") setEliminationStyle("guided");
     setQuiz(null);
     setView("learn");
   }
@@ -252,7 +254,7 @@ export default function QuizApp() {
     const questions = buildQuiz(topic, quizLength, progress, quizMode, region);
     setQuiz({
       mode: quizMode,
-      eliminationStyle,
+      eliminationStyle: freePickElimination ? "free" : "guided",
       region: quizMode === "adaptive" ? "All" : region,
       questions,
       index: 0,
@@ -369,6 +371,8 @@ export default function QuizApp() {
             selectedCode={quiz.selectedCode}
             region={quiz.region}
             prompt={quiz.questions[quiz.index].direction === "country-to-answer" ? "country" : "flag"}
+            elimination={quiz.mode === "elimination"}
+            eliminatedCodes={quiz.mode === "elimination" ? quiz.questions.slice(0, quiz.index).map((question) => question.country.code) : []}
             onAnswer={answer}
             onNext={nextQuestion}
           />
@@ -451,23 +455,23 @@ export default function QuizApp() {
                 <span>02</span>
                 <div>
                   <h2>{quizMode === "adaptive" ? "Set your pace" : quizMode === "elimination" ? "Build an elimination quiz" : "Build a region test"}</h2>
-                  <p>{quizMode === "adaptive" ? "Mastered countries stay retired." : quizMode === "elimination" ? "The answer bank shrinks as you go." : "Mastery is ignored in test mode."}</p>
+                  <p>{quizMode === "adaptive" ? "Mastered countries stay retired." : quizMode === "elimination" ? topic === "map" ? "Completed locations are removed as you go." : "The answer bank shrinks as you go." : "Mastery is ignored in test mode."}</p>
                 </div>
               </div>
-              <div className={`mode-picker ${topic === "flags" ? "three-modes" : ""}`} role="group" aria-label="Quiz mode">
+              <div className={`mode-picker ${topic !== "capitals" ? "three-modes" : ""}`} role="group" aria-label="Quiz mode">
                 <button className={quizMode === "adaptive" ? "active" : ""} onClick={() => setQuizMode("adaptive")} aria-pressed={quizMode === "adaptive"}>
                   <strong>Adaptive</strong><span>Learn what’s left</span>
                 </button>
                 <button className={quizMode === "region" ? "active" : ""} onClick={() => setQuizMode("region")} aria-pressed={quizMode === "region"}>
                   <strong>Region test</strong><span>Include everything</span>
                 </button>
-                {topic === "flags" && (
+                {topic !== "capitals" && (
                   <button className={quizMode === "elimination" ? "active" : ""} onClick={() => setQuizMode("elimination")} aria-pressed={quizMode === "elimination"}>
-                    <strong>Elimination</strong><span>Use the full answer bank</span>
+                    <strong>Elimination</strong><span>{topic === "map" ? "Remove places as you go" : "Use the full answer bank"}</span>
                   </button>
                 )}
               </div>
-              {quizMode === "elimination" && (
+              {topic === "flags" && quizMode === "elimination" && (
                 <div className="elimination-style-picker" role="group" aria-label="Elimination style">
                   <button className={eliminationStyle === "guided" ? "active" : ""} onClick={() => setEliminationStyle("guided")} aria-pressed={eliminationStyle === "guided"}>
                     <strong>Guided</strong><span>Wayfinder chooses</span>
@@ -496,8 +500,8 @@ export default function QuizApp() {
                 </div>
               )}
               <div className="session-summary">
-                <div><span>{quizMode === "elimination" && eliminationStyle === "free" ? "Flags on board" : "Today’s set"}</span><strong>{sessionCount}</strong><small>{quizMode === "elimination" && eliminationStyle === "free" ? "flags" : "questions"}</small></div>
-                <div><span>{quizMode === "adaptive" ? "Still learning" : quizMode === "elimination" ? eliminationStyle === "free" ? "Country choices" : "Starting choices" : "Available"}</span><strong>{availableCount}</strong><small>countries</small></div>
+                <div><span>{freePickElimination ? "Flags on board" : "Today’s set"}</span><strong>{sessionCount}</strong><small>{freePickElimination ? "flags" : "questions"}</small></div>
+                <div><span>{quizMode === "adaptive" ? "Still learning" : quizMode === "elimination" ? freePickElimination ? "Country choices" : "Starting choices" : "Available"}</span><strong>{availableCount}</strong><small>countries</small></div>
               </div>
               <button className="start-button" onClick={startQuiz} disabled={availableCount === 0 || syncStatus === "syncing"}>
                 <span>
@@ -506,7 +510,7 @@ export default function QuizApp() {
                     : availableCount === 0
                       ? "Set mastered"
                       : quizMode === "elimination"
-                        ? `Start ${region === "All" ? "world" : region} ${eliminationStyle === "free" ? "free-pick" : "guided"} quiz`
+                        ? `Start ${region === "All" ? "world" : region} ${freePickElimination ? "free-pick" : topic === "map" ? "map elimination" : "guided"} quiz`
                         : quizMode === "region"
                         ? `Start ${region === "All" ? "world" : region} ${topic === "flags" ? "flag" : topic === "capitals" ? "capital" : "map"} test`
                         : `Start ${topic === "flags" ? "flag" : topic === "capitals" ? "capital" : "map"} quiz`}
@@ -520,8 +524,10 @@ export default function QuizApp() {
                     ? "Prompts alternate between country names and flags, and retire after a 3-answer streak."
                     : "Questions alternate direction and retire after a 3-answer streak."
                   : quizMode === "elimination"
-                    ? eliminationStyle === "free"
+                    ? freePickElimination
                       ? `Choose any remaining flag from ${region === "All" ? "the world" : region}, then search the unused country names for its match.`
+                      : topic === "map"
+                        ? `Find every country in ${region === "All" ? "the world" : region}; completed locations are removed from the clickable map.`
                       : `Every unused flag or country in ${region === "All" ? "the world" : region} remains available until its turn is complete.`
                   : topic === "map"
                     ? `Includes mastered countries from ${region === "All" ? "every region" : region} and alternates country-name and flag prompts.`
