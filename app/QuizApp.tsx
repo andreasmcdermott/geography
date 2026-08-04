@@ -550,7 +550,7 @@ function FreePickQuiz({ boardCodes, remainingCodes, score, attempts, onAttempt }
   const [selectedFlag, setSelectedFlag] = useState<Country | null>(null);
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<{ correct: boolean } | null>(null);
-  const [flagMarks, setFlagMarks] = useState<Record<string, { status: "correct" | "wrong"; attempt: number }>>({});
+  const [recentWrongCode, setRecentWrongCode] = useState<string | null>(null);
   const returnTimer = useRef<number | null>(null);
   const remainingSet = useMemo(() => new Set(remainingCodes), [remainingCodes]);
   const remainingCountries = useMemo(
@@ -578,10 +578,7 @@ function FreePickQuiz({ boardCodes, remainingCodes, score, attempts, onAttempt }
     if (!selectedFlag || result) return;
     const correct = selectedFlag.code === country.code;
     setResult({ correct });
-    setFlagMarks((current) => ({
-      ...current,
-      [selectedFlag.code]: { status: correct ? "correct" : "wrong", attempt: (current[selectedFlag.code]?.attempt ?? 0) + 1 },
-    }));
+    setRecentWrongCode(correct ? null : selectedFlag.code);
     onAttempt(selectedFlag.code, country.code);
     returnTimer.current = window.setTimeout(returnToBoard, correct ? 325 : 650);
   }
@@ -620,15 +617,15 @@ function FreePickQuiz({ boardCodes, remainingCodes, score, attempts, onAttempt }
           const country = countryLookup.get(code);
           if (!country) return null;
           const matched = !remainingSet.has(code);
-          const mark = flagMarks[code];
+          const recentlyWrong = recentWrongCode === code;
           return matched ? (
             <span className="matched-flag-slot" key={code} aria-label={`Flag ${index + 1} matched`}>
               <FlagImage code={code} label={`Matched flag ${index + 1}`} /><b aria-hidden="true">✓</b>
             </span>
           ) : (
-            <button className={mark?.status === "wrong" ? "recent-wrong" : ""} key={`${code}-${mark?.attempt ?? 0}`} onClick={() => { setSelectedFlag(country); setQuery(""); setResult(null); }} aria-label={`Choose flag ${index + 1}`}>
+            <button className={recentlyWrong ? "recent-wrong" : ""} key={code} onClick={() => { setRecentWrongCode(null); setSelectedFlag(country); setQuery(""); setResult(null); }} aria-label={`Choose flag ${index + 1}`}>
               <FlagImage code={code} label={`Flag choice ${index + 1}`} />
-              {mark?.status === "wrong" && <b className="wrong-mark" aria-hidden="true">×</b>}
+              {recentlyWrong && <b className="wrong-mark" aria-hidden="true">×</b>}
             </button>
           );
         })}
