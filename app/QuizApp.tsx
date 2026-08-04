@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element -- these are tiny self-hosted SVG study assets, not photographic content */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { countries, Country } from "./countries";
 import MapQuestionCard from "./MapQuestionCard";
 
@@ -11,6 +11,7 @@ type Direction = "country-to-answer" | "answer-to-country";
 type View = "learn" | "countries";
 type SyncStatus = "syncing" | "synced" | "local" | "error";
 type QuizMode = "adaptive" | "region" | "elimination";
+type EliminationStyle = "guided" | "free";
 type RegionFilter = "All" | "Africa" | "Americas" | "Asia" | "Europe" | "Oceania";
 type QuizLength = 20 | 30 | 40 | 50 | "all";
 
@@ -31,10 +32,13 @@ type Question = {
 
 type QuizState = {
   mode: QuizMode;
+  eliminationStyle: EliminationStyle;
   region: RegionFilter;
   questions: Question[];
   index: number;
   score: number;
+  attempts: number;
+  freeRemainingCodes: string[];
   selectedCode: string | null;
   complete: boolean;
 };
@@ -43,6 +47,7 @@ const STORAGE_KEY = "wayfinder-geography-progress-v1";
 const emptyProgress: Progress = { flags: {}, capitals: {}, map: {} };
 const regionFilters: RegionFilter[] = ["All", "Africa", "Americas", "Asia", "Europe", "Oceania"];
 const quizLengths: QuizLength[] = [20, 30, 40, 50, "all"];
+const countryLookup = new Map(countries.map((country) => [country.code, country]));
 
 function mergeProgress(local: Progress, remote: Progress): Progress {
   const merged: Progress = { flags: {}, capitals: {}, map: {} };
@@ -111,8 +116,7 @@ function buildQuiz(topic: Topic, length: QuizLength, progress: Progress, mode: Q
         : "country-to-answer";
 
     if (mode === "elimination") {
-      const usedCodes = new Set(pool.slice(0, index).map((item) => item.code));
-      return { country, direction, options: eliminationAnswerOrder.filter((item) => !usedCodes.has(item.code)) };
+      return { country, direction, options: eliminationAnswerOrder };
     }
 
     return makeQuestion(country, direction, optionPool);
@@ -121,6 +125,13 @@ function buildQuiz(topic: Topic, length: QuizLength, progress: Progress, mode: Q
 
 function plural(value: number, word: string) {
   return `${value} ${word}${value === 1 ? "" : "s"}`;
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLocaleLowerCase();
 }
 
 function FlagImage({ code, label, className = "" }: { code: string; label?: string; className?: string }) {
@@ -138,6 +149,7 @@ export default function QuizApp() {
   const [topic, setTopic] = useState<Topic>("flags");
   const [view, setView] = useState<View>("learn");
   const [quizMode, setQuizMode] = useState<QuizMode>("adaptive");
+  const [eliminationStyle, setEliminationStyle] = useState<EliminationStyle>("guided");
   const [region, setRegion] = useState<RegionFilter>("All");
   const [quizLength, setQuizLength] = useState<QuizLength>(20);
   const [progress, setProgress] = useState<Progress>(emptyProgress);
@@ -227,10 +239,12 @@ export default function QuizApp() {
   }, [quizMode, region, stats.remaining]);
 
   const sessionCount = quizMode === "elimination" || quizLength === "all" ? availableCount : Math.min(quizLength, availableCount);
+  const freePickElimination = topic === "flags" && quizMode === "elimination" && eliminationStyle === "free";
 
   function chooseTopic(nextTopic: Topic) {
     setTopic(nextTopic);
-    if (nextTopic !== "flags" && quizMode === "elimination") setQuizMode("region");
+    if (nextTopic === "capitals" && quizMode === "elimination") setQuizMode("region");
+    if (nextTopic !== "flags") setEliminationStyle("guided");
     setQuiz(null);
     setView("learn");
   }
@@ -239,29 +253,27 @@ export default function QuizApp() {
     const questions = buildQuiz(topic, quizLength, progress, quizMode, region);
     setQuiz({
       mode: quizMode,
+      eliminationStyle: freePickElimination ? "free" : "guided",
       region: quizMode === "adaptive" ? "All" : region,
       questions,
       index: 0,
       score: 0,
+      attempts: 0,
+      freeRemainingCodes: questions.map((question) => question.country.code),
       selectedCode: null,
       complete: questions.length === 0,
     });
   }
 
-  function answer(code: string) {
-    if (!quiz || quiz.selectedCode) return;
-    const question = quiz.questions[quiz.index];
-    const isCorrect = code === question.country.code;
-
-    setQuiz({ ...quiz, selectedCode: code, score: quiz.score + (isCorrect ? 1 : 0) });
+  function recordAnswer(topicName: Topic, countryCode: string, isCorrect: boolean) {
     setProgress((current) => {
-      const old = current[topic][question.country.code] ?? { attempts: 0, correct: 0, streak: 0, mastered: false };
+      const old = current[topicName][countryCode] ?? { attempts: 0, correct: 0, streak: 0, mastered: false };
       const streak = isCorrect ? old.streak + 1 : 0;
       return {
         ...current,
-        [topic]: {
-          ...current[topic],
-          [question.country.code]: {
+        [topicName]: {
+          ...current[topicName],
+          [countryCode]: {
             attempts: old.attempts + 1,
             correct: old.correct + (isCorrect ? 1 : 0),
             streak,
@@ -270,13 +282,46 @@ export default function QuizApp() {
         },
       };
     });
-    void syncAnswer(topic, question.country.code, isCorrect);
+    void syncAnswer(topicName, countryCode, isCorrect);
+  }
+
+  function answer(code: string) {
+    if (!quiz || quiz.selectedCode) return;
+    const question = quiz.questions[quiz.index];
+    const isCorrect = code === question.country.code;
+
+    setQuiz({ ...quiz, selectedCode: code, score: quiz.score + (isCorrect ? 1 : 0) });
+    recordAnswer(topic, question.country.code, isCorrect);
+  }
+
+  function answerFreePick(flagCode: string, countryCode: string) {
+    if (!quiz || quiz.mode !== "elimination" || quiz.eliminationStyle !== "free" || !quiz.freeRemainingCodes.includes(flagCode)) return;
+    const isCorrect = flagCode === countryCode;
+    const remainingCodes = isCorrect ? quiz.freeRemainingCodes.filter((code) => code !== flagCode) : quiz.freeRemainingCodes;
+    setQuiz({
+      ...quiz,
+      attempts: quiz.attempts + 1,
+      score: quiz.score + (isCorrect ? 1 : 0),
+      freeRemainingCodes: remainingCodes,
+      complete: isCorrect && remainingCodes.length === 0,
+    });
+    recordAnswer("flags", flagCode, isCorrect);
   }
 
   function nextQuestion() {
     if (!quiz) return;
     const atEnd = quiz.index === quiz.questions.length - 1;
     setQuiz(atEnd ? { ...quiz, complete: true } : { ...quiz, index: quiz.index + 1, selectedCode: null });
+  }
+
+  function skipQuestion() {
+    if (!quiz || quiz.mode !== "elimination" || quiz.eliminationStyle !== "guided" || quiz.selectedCode || quiz.index >= quiz.questions.length - 1) return;
+    const completed = quiz.questions.slice(0, quiz.index);
+    const remaining = quiz.questions.slice(quiz.index);
+    const [skipped, ...rest] = remaining;
+    const directionSlots = remaining.map((question) => question.direction);
+    const reordered = [...rest, skipped].map((question, index) => ({ ...question, direction: directionSlots[index] }));
+    setQuiz({ ...quiz, questions: [...completed, ...reordered] });
   }
 
   async function resetTopic() {
@@ -301,11 +346,11 @@ export default function QuizApp() {
             <span className="brand-mark" aria-hidden="true"><i /><i /><i /></span>
             <span>Wayfinder</span>
           </button>
-          {!quiz.complete && quiz.questions.length > 0 && (
-            <div className="quiz-position" aria-label={`Question ${quiz.index + 1} of ${quiz.questions.length}`}>
-              <span>{quiz.index + 1}</span> / {quiz.questions.length}
-            </div>
-          )}
+          {!quiz.complete && quiz.questions.length > 0 && (quiz.mode === "elimination" && quiz.eliminationStyle === "free" ? (
+            <div className="quiz-position" aria-label={`${quiz.freeRemainingCodes.length} flags remaining`}><span>{quiz.freeRemainingCodes.length}</span> remaining</div>
+          ) : (
+            <div className="quiz-position" aria-label={`Question ${quiz.index + 1} of ${quiz.questions.length}`}><span>{quiz.index + 1}</span> / {quiz.questions.length}</div>
+          ))}
           <button className="quiet-button" onClick={() => setQuiz(null)}>Exit quiz</button>
         </header>
 
@@ -313,11 +358,19 @@ export default function QuizApp() {
           <QuizComplete
             topic={topic}
             score={quiz.score}
-            total={quiz.questions.length}
+            total={quiz.mode === "elimination" && quiz.eliminationStyle === "free" ? quiz.attempts : quiz.questions.length}
             remaining={countries.length - Object.values(progress[topic]).filter((item) => item.mastered).length}
             canRepeat={quiz.mode !== "adaptive" || countries.length - Object.values(progress[topic]).filter((item) => item.mastered).length > 0}
             onAgain={startQuiz}
             onHome={() => setQuiz(null)}
+          />
+        ) : quiz.mode === "elimination" && quiz.eliminationStyle === "free" ? (
+          <FreePickQuiz
+            boardCodes={quiz.questions.map((question) => question.country.code)}
+            remainingCodes={quiz.freeRemainingCodes}
+            score={quiz.score}
+            attempts={quiz.attempts}
+            onAttempt={answerFreePick}
           />
         ) : topic === "map" ? (
           <MapQuestionCard
@@ -327,8 +380,12 @@ export default function QuizApp() {
             selectedCode={quiz.selectedCode}
             region={quiz.region}
             prompt={quiz.questions[quiz.index].direction === "country-to-answer" ? "country" : "flag"}
+            elimination={quiz.mode === "elimination"}
+            eliminatedCodes={quiz.mode === "elimination" ? quiz.questions.slice(0, quiz.index).map((question) => question.country.code) : []}
+            canSkip={quiz.mode === "elimination" && quiz.eliminationStyle === "guided" && quiz.index < quiz.questions.length - 1 && !quiz.selectedCode}
             onAnswer={answer}
             onNext={nextQuestion}
+            onSkip={skipQuestion}
           />
         ) : (
           <QuestionCard
@@ -336,6 +393,7 @@ export default function QuizApp() {
             quiz={quiz}
             onAnswer={answer}
             onNext={nextQuestion}
+            onSkip={skipQuestion}
           />
         )}
       </main>
@@ -409,22 +467,32 @@ export default function QuizApp() {
                 <span>02</span>
                 <div>
                   <h2>{quizMode === "adaptive" ? "Set your pace" : quizMode === "elimination" ? "Build an elimination quiz" : "Build a region test"}</h2>
-                  <p>{quizMode === "adaptive" ? "Mastered countries stay retired." : quizMode === "elimination" ? "The answer bank shrinks as you go." : "Mastery is ignored in test mode."}</p>
+                  <p>{quizMode === "adaptive" ? "Mastered countries stay retired." : quizMode === "elimination" ? topic === "map" ? "Completed locations are removed as you go." : "The answer bank shrinks as you go." : "Mastery is ignored in test mode."}</p>
                 </div>
               </div>
-              <div className={`mode-picker ${topic === "flags" ? "three-modes" : ""}`} role="group" aria-label="Quiz mode">
+              <div className={`mode-picker ${topic !== "capitals" ? "three-modes" : ""}`} role="group" aria-label="Quiz mode">
                 <button className={quizMode === "adaptive" ? "active" : ""} onClick={() => setQuizMode("adaptive")} aria-pressed={quizMode === "adaptive"}>
                   <strong>Adaptive</strong><span>Learn what’s left</span>
                 </button>
                 <button className={quizMode === "region" ? "active" : ""} onClick={() => setQuizMode("region")} aria-pressed={quizMode === "region"}>
                   <strong>Region test</strong><span>Include everything</span>
                 </button>
-                {topic === "flags" && (
+                {topic !== "capitals" && (
                   <button className={quizMode === "elimination" ? "active" : ""} onClick={() => setQuizMode("elimination")} aria-pressed={quizMode === "elimination"}>
-                    <strong>Elimination</strong><span>Use the full answer bank</span>
+                    <strong>Elimination</strong><span>{topic === "map" ? "Remove places as you go" : "Use the full answer bank"}</span>
                   </button>
                 )}
               </div>
+              {topic === "flags" && quizMode === "elimination" && (
+                <div className="elimination-style-picker" role="group" aria-label="Elimination style">
+                  <button className={eliminationStyle === "guided" ? "active" : ""} onClick={() => setEliminationStyle("guided")} aria-pressed={eliminationStyle === "guided"}>
+                    <strong>Guided</strong><span>Wayfinder chooses</span>
+                  </button>
+                  <button className={eliminationStyle === "free" ? "active" : ""} onClick={() => setEliminationStyle("free")} aria-pressed={eliminationStyle === "free"}>
+                    <strong>Free pick</strong><span>Choose any flag</span>
+                  </button>
+                </div>
+              )}
               {quizMode !== "adaptive" && (
                 <div className="region-picker" role="group" aria-label="Region">
                   {regionFilters.map((item) => (
@@ -444,8 +512,8 @@ export default function QuizApp() {
                 </div>
               )}
               <div className="session-summary">
-                <div><span>Today’s set</span><strong>{sessionCount}</strong><small>questions</small></div>
-                <div><span>{quizMode === "adaptive" ? "Still learning" : quizMode === "elimination" ? "Starting choices" : "Available"}</span><strong>{availableCount}</strong><small>countries</small></div>
+                <div><span>{freePickElimination ? "Flags on board" : "Today’s set"}</span><strong>{sessionCount}</strong><small>{freePickElimination ? "flags" : "questions"}</small></div>
+                <div><span>{quizMode === "adaptive" ? "Still learning" : quizMode === "elimination" ? freePickElimination ? "Country choices" : "Starting choices" : "Available"}</span><strong>{availableCount}</strong><small>countries</small></div>
               </div>
               <button className="start-button" onClick={startQuiz} disabled={availableCount === 0 || syncStatus === "syncing"}>
                 <span>
@@ -454,7 +522,7 @@ export default function QuizApp() {
                     : availableCount === 0
                       ? "Set mastered"
                       : quizMode === "elimination"
-                        ? `Start ${region === "All" ? "world" : region} elimination quiz`
+                        ? `Start ${region === "All" ? "world" : region} ${freePickElimination ? "free-pick" : topic === "map" ? "map elimination" : "guided"} quiz`
                         : quizMode === "region"
                         ? `Start ${region === "All" ? "world" : region} ${topic === "flags" ? "flag" : topic === "capitals" ? "capital" : "map"} test`
                         : `Start ${topic === "flags" ? "flag" : topic === "capitals" ? "capital" : "map"} quiz`}
@@ -468,7 +536,11 @@ export default function QuizApp() {
                     ? "Prompts alternate between country names and flags, and retire after a 3-answer streak."
                     : "Questions alternate direction and retire after a 3-answer streak."
                   : quizMode === "elimination"
-                    ? `Every unused flag or country in ${region === "All" ? "the world" : region} remains available until its turn is complete.`
+                    ? freePickElimination
+                      ? `Choose any remaining flag from ${region === "All" ? "the world" : region}, then search the unused country names for its match.`
+                      : topic === "map"
+                        ? `Find every country in ${region === "All" ? "the world" : region}; completed locations are removed from the clickable map.`
+                      : `Every unused flag or country in ${region === "All" ? "the world" : region} remains available until its turn is complete.`
                   : topic === "map"
                     ? `Includes mastered countries from ${region === "All" ? "every region" : region} and alternates country-name and flag prompts.`
                     : `Includes mastered countries from ${region === "All" ? "every region" : region} and alternates both directions.`}
@@ -487,20 +559,111 @@ export default function QuizApp() {
           </section>
         </>
       )}
-      <footer><span>Made for curious minds.</span><span><a href="/licenses/flag-icons-MIT.txt">Flags by flag-icons · MIT</a> · <a href="/licenses/natural-earth-public-domain.txt">Map by Natural Earth</a></span><span>{countries.length} countries · Flags, capitals & maps</span></footer>
+      <footer><span>Made for curious minds.</span><span><a href="/licenses/country-flags-public-domain.txt">Flags by country-flags · Public domain</a> · <a href="/licenses/natural-earth-public-domain.txt">Map by Natural Earth</a></span><span>{countries.length} countries · Flags, capitals & maps</span></footer>
     </main>
   );
 }
 
-function QuestionCard({ topic, quiz, onAnswer, onNext }: { topic: Topic; quiz: QuizState; onAnswer: (code: string) => void; onNext: () => void }) {
+function FreePickQuiz({ boardCodes, remainingCodes, score, attempts, onAttempt }: { boardCodes: string[]; remainingCodes: string[]; score: number; attempts: number; onAttempt: (flagCode: string, countryCode: string) => void }) {
+  const [selectedFlag, setSelectedFlag] = useState<Country | null>(null);
+  const [query, setQuery] = useState("");
+  const [result, setResult] = useState<{ correct: boolean } | null>(null);
+  const [recentWrongCode, setRecentWrongCode] = useState<string | null>(null);
+  const returnTimer = useRef<number | null>(null);
+  const remainingSet = useMemo(() => new Set(remainingCodes), [remainingCodes]);
+  const remainingCountries = useMemo(
+    () => remainingCodes.map((code) => countryLookup.get(code)).filter((country): country is Country => Boolean(country)).sort((a, b) => a.name.localeCompare(b.name)),
+    [remainingCodes],
+  );
+  const filteredCountries = useMemo(() => {
+    const normalized = normalizeSearchText(query.trim());
+    return normalized ? remainingCountries.filter((country) => normalizeSearchText(country.name).includes(normalized)) : remainingCountries;
+  }, [query, remainingCountries]);
+
+  useEffect(() => () => {
+    if (returnTimer.current !== null) window.clearTimeout(returnTimer.current);
+  }, []);
+
+  function returnToBoard() {
+    if (returnTimer.current !== null) window.clearTimeout(returnTimer.current);
+    returnTimer.current = null;
+    setSelectedFlag(null);
+    setResult(null);
+    setQuery("");
+  }
+
+  function chooseCountry(country: Country) {
+    if (!selectedFlag || result) return;
+    const correct = selectedFlag.code === country.code;
+    setResult({ correct });
+    setRecentWrongCode(correct ? null : selectedFlag.code);
+    onAttempt(selectedFlag.code, country.code);
+    returnTimer.current = window.setTimeout(returnToBoard, correct ? 325 : 650);
+  }
+
+  if (selectedFlag) {
+    return (
+      <section className="question-wrap free-pick-wrap">
+        <div className="question-progress"><span style={{ width: `${(score / boardCodes.length) * 100}%` }} /></div>
+        <div className="question-kicker"><span>Free-pick elimination</span><i /><span>{remainingCodes.length} flags remaining</span></div>
+        <div className="free-pick-selected"><FlagImage code={selectedFlag.code} label="Selected flag" /></div>
+        <h1>Which country uses this flag?</h1>
+        {result && <div className={`free-answer-flash ${result.correct ? "success" : "error"}`} role="status"><span>{result.correct ? "✓" : "×"}</span></div>}
+        <div className="free-country-toolbar">
+          <label><span>Filter by country name</span><input autoFocus disabled={Boolean(result)} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Start typing a country…" /></label>
+          <button className="quiet-button" disabled={Boolean(result)} onClick={returnToBoard}>Back to flags</button>
+        </div>
+        <div className={`free-country-list ${result ? "locked" : ""}`} aria-label="Unused country choices">
+          {filteredCountries.map((country) => (
+            <button key={country.code} disabled={Boolean(result)} onClick={() => chooseCountry(country)}><strong>{country.name}</strong><span>{country.region}</span></button>
+          ))}
+        </div>
+        {filteredCountries.length === 0 && <div className="empty-state">No remaining countries match “{query}”.</div>}
+      </section>
+    );
+  }
+
+  return (
+    <section className="question-wrap free-pick-wrap">
+      <div className="question-progress"><span style={{ width: `${(score / boardCodes.length) * 100}%` }} /></div>
+      <div className="free-pick-board-heading">
+        <div><p className="eyebrow">Free-pick elimination</p><h1>Choose a flag you know.</h1><p>Matched flags stay faded in place. Incorrect flags remain available for later.</p></div>
+        <div><strong>{remainingCodes.length}</strong><span>remaining</span><small>{attempts ? `${Math.round((score / attempts) * 100)}% accuracy` : "No attempts yet"}</small></div>
+      </div>
+      <div className="free-flag-board" aria-label={`${remainingCodes.length} unmatched flags`}>
+        {boardCodes.map((code, index) => {
+          const country = countryLookup.get(code);
+          if (!country) return null;
+          const matched = !remainingSet.has(code);
+          const recentlyWrong = recentWrongCode === code;
+          return matched ? (
+            <span className="matched-flag-slot" key={code} aria-label={`Flag ${index + 1} matched`}>
+              <FlagImage code={code} label={`Matched flag ${index + 1}`} /><b aria-hidden="true">✓</b>
+            </span>
+          ) : (
+            <button className={recentlyWrong ? "recent-wrong" : ""} key={code} onClick={() => { setRecentWrongCode(null); setSelectedFlag(country); setQuery(""); setResult(null); }} aria-label={`Choose flag ${index + 1}`}>
+              <FlagImage code={code} label={`Flag choice ${index + 1}`} />
+              {recentlyWrong && <b className="wrong-mark" aria-hidden="true">×</b>}
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function QuestionCard({ topic, quiz, onAnswer, onNext, onSkip }: { topic: Topic; quiz: QuizState; onAnswer: (code: string) => void; onNext: () => void; onSkip: () => void }) {
   const question = quiz.questions[quiz.index];
   const answered = quiz.selectedCode !== null;
   const isCorrect = quiz.selectedCode === question.country.code;
   const countryFirst = question.direction === "country-to-answer";
   const isElimination = quiz.mode === "elimination";
+  const remainingCodes = new Set(quiz.questions.slice(quiz.index).map((item) => item.country.code));
+  const availableOptions = isElimination ? question.options.filter((option) => remainingCodes.has(option.code)) : question.options;
   const displayedOptions = isElimination && !countryFirst
-    ? [...question.options].sort((a, b) => a.name.localeCompare(b.name))
-    : question.options;
+    ? [...availableOptions].sort((a, b) => a.name.localeCompare(b.name))
+    : availableOptions;
+  const canSkip = isElimination && quiz.eliminationStyle === "guided" && !answered && quiz.index < quiz.questions.length - 1;
   const prompt = topic === "flags"
     ? countryFirst ? `Which flag belongs to ${question.country.name}?` : "Which country uses this flag?"
     : countryFirst ? `What is the capital of ${question.country.name}?` : `Which country has ${question.country.capital} as its capital?`;
@@ -511,7 +674,8 @@ function QuestionCard({ topic, quiz, onAnswer, onNext }: { topic: Topic; quiz: Q
       <div className="question-kicker"><span>{topic === "flags" ? "Flag study" : "Capital study"}</span><i /> <span>{countryFirst ? "Country → answer" : "Answer → country"}</span></div>
       {!countryFirst && topic === "flags" && <div className="question-flag"><FlagImage code={question.country.code} label="Flag to identify" /></div>}
       <h1>{prompt}</h1>
-      <p className="question-hint">{isElimination ? `${question.options.length} unused ${countryFirst ? "flags" : "countries"} remain.` : "Choose the best answer."}</p>
+      <p className="question-hint">{isElimination ? `${availableOptions.length} unused ${countryFirst ? "flags" : "countries"} remain.` : "Choose the best answer."}</p>
+      {canSkip && <div className="skip-question-row"><button onClick={onSkip}>Skip for now <span>→</span></button></div>}
       {answered && isElimination && <AnswerFeedback isCorrect={isCorrect} question={question} atEnd={quiz.index === quiz.questions.length - 1} onNext={onNext} floating />}
       <div className={`answer-grid ${topic === "flags" && countryFirst ? "flag-options" : ""} ${isElimination ? "elimination-options" : ""} ${isElimination && !countryFirst ? "country-options" : ""}`}>
         {displayedOptions.map((option, index) => {

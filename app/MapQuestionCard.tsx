@@ -22,8 +22,12 @@ type MapQuestionCardProps = {
   selectedCode: string | null;
   region: RegionFilter;
   prompt: "country" | "flag";
+  elimination: boolean;
+  eliminatedCodes: string[];
+  canSkip: boolean;
   onAnswer: (code: string) => void;
   onNext: () => void;
+  onSkip: () => void;
 };
 
 const countryByCode = new Map(countries.map((country) => [country.code, country]));
@@ -66,7 +70,7 @@ export default function MapQuestionCard(props: MapQuestionCardProps) {
   return <LoadedMapQuestionCard {...props} featureCollection={featureCollection} />;
 }
 
-function LoadedMapQuestionCard({ country, index, total, selectedCode, region, prompt, onAnswer, onNext, featureCollection }: MapQuestionCardProps & { featureCollection: FeatureCollection<MultiPolygon, MapProperties> }) {
+function LoadedMapQuestionCard({ country, index, total, selectedCode, region, prompt, elimination, eliminatedCodes, canSkip, onAnswer, onNext, onSkip, featureCollection }: MapQuestionCardProps & { featureCollection: FeatureCollection<MultiPolygon, MapProperties> }) {
   const answered = selectedCode !== null;
   const isCorrect = selectedCode === country.code;
   const [viewport, setViewport] = useState<MapViewport>({ x: 0, y: 0, scale: 1 });
@@ -75,9 +79,12 @@ function LoadedMapQuestionCard({ country, index, total, selectedCode, region, pr
   const suppressClickRef = useRef(false);
 
   const mapFeatures = featureCollection.features as MapFeature[];
+  const eliminatedSet = useMemo(() => new Set(eliminatedCodes), [eliminatedCodes]);
   const activeCodes = useMemo(() => new Set(
-    countries.filter((item) => region === "All" || item.region === region).map((item) => item.code),
-  ), [region]);
+    countries
+      .filter((item) => (region === "All" || item.region === region) && !eliminatedSet.has(item.code))
+      .map((item) => item.code),
+  ), [eliminatedSet, region]);
   const activeFeatures = useMemo(
     () => mapFeatures.filter((feature) => activeCodes.has(feature.properties.code)),
     [activeCodes, mapFeatures],
@@ -137,7 +144,7 @@ function LoadedMapQuestionCard({ country, index, total, selectedCode, region, pr
   return (
     <section className="question-wrap map-question-wrap">
       <div className="question-progress"><span style={{ width: `${((index + (answered ? 1 : 0)) / total) * 100}%` }} /></div>
-      <div className="question-kicker"><span>Map study</span><i /><span>{prompt === "flag" ? "Flag → location" : "Country → location"}</span></div>
+      <div className="question-kicker"><span>{elimination ? "Map elimination" : "Map study"}</span><i /><span>{prompt === "flag" ? "Flag → location" : "Country → location"}</span></div>
       {prompt === "flag" && (
         <div className="map-prompt-flag">
           <img src={`/flags/${country.code.toLocaleLowerCase()}.svg`} alt="Flag to locate" draggable={false} />
@@ -146,7 +153,8 @@ function LoadedMapQuestionCard({ country, index, total, selectedCode, region, pr
       {prompt === "flag"
         ? <h1>Find this flag’s country on the map.</h1>
         : <h1>Find <em>{country.name}</em> on the map.</h1>}
-      <p className="question-hint">Select the country’s location. Scroll or use the controls to zoom, then drag to pan.</p>
+      <p className="question-hint">{elimination ? `${activeCodes.size} unused locations remain. ` : ""}Select the country’s location. Scroll or use the controls to zoom, then drag to pan.</p>
+      {canSkip && <div className="skip-question-row"><button onClick={onSkip}>Skip for now <span>→</span></button></div>}
 
       <div className="map-frame">
         <div className="map-controls" role="group" aria-label="Map controls">
@@ -236,7 +244,7 @@ function LoadedMapQuestionCard({ country, index, total, selectedCode, region, pr
             })}
           </g>
         </svg>
-        <div className="map-legend" aria-hidden="true"><span className="active-swatch" />{region === "All" ? "Quiz countries" : region}<span className="inactive-swatch" />Outside quiz</div>
+        <div className="map-legend" aria-hidden="true"><span className="active-swatch" />{elimination ? "Remaining countries" : region === "All" ? "Quiz countries" : region}<span className="inactive-swatch" />{elimination ? "Used / outside quiz" : "Outside quiz"}</div>
       </div>
 
       {answered && (
