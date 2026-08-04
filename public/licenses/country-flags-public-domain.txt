@@ -1,0 +1,11 @@
+Country flag artwork
+
+Source: country-flags by Hampus Joakim Borgos
+https://github.com/hampusborgos/country-flags
+
+The source project describes these accurate SVG flag renders as public-domain
+material, primarily sourced from Wikimedia Commons. Country flags may still be
+subject to non-copyright restrictions under local law.
+
+The SVGs are presented at their native proportions so that dimensions that are
+part of a flag's official design remain visible in the quiz.

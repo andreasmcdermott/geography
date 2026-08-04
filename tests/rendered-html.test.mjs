@@ -5,9 +5,13 @@ import test from "node:test";
 const root = new URL("../", import.meta.url);
 
 test("keeps account progress behind authenticated server storage", async () => {
-  const [page, client, mapClient, mapData, countriesSource, route, hosting, migration] = await Promise.all([
+  const [page, client, styles, indonesiaFlag, monacoFlag, flagNotice, mapClient, mapData, countriesSource, route, hosting, migration] = await Promise.all([
     readFile(new URL("app/page.tsx", root), "utf8"),
     readFile(new URL("app/QuizApp.tsx", root), "utf8"),
+    readFile(new URL("app/globals.css", root), "utf8"),
+    readFile(new URL("public/flags/id.svg", root), "utf8"),
+    readFile(new URL("public/flags/mc.svg", root), "utf8"),
+    readFile(new URL("public/licenses/country-flags-public-domain.txt", root), "utf8"),
     readFile(new URL("app/MapQuestionCard.tsx", root), "utf8"),
     readFile(new URL("public/data/world-map.json", root), "utf8"),
     readFile(new URL("app/countries.ts", root), "utf8"),
@@ -20,6 +24,17 @@ test("keeps account progress behind authenticated server storage", async () => {
   assert.match(client, /Saved to your account/);
   assert.match(client, /\/api\/progress/);
   assert.match(client, /\/flags\/\$\{code\.toLocaleLowerCase\(\)\}\.svg/);
+  const flagRatio = (source) => {
+    const viewBox = source.match(/viewBox="([^"]+)"/)?.[1].trim().split(/\s+/).map(Number);
+    assert.equal(viewBox?.length, 4);
+    return viewBox[2] / viewBox[3];
+  };
+  assert.equal(flagRatio(indonesiaFlag), 3 / 2);
+  assert.equal(flagRatio(monacoFlag), 5 / 4);
+  assert.doesNotMatch(styles, /aspect-ratio:\s*4\s*\/\s*3/);
+  assert.match(styles, /\.flag-image[^}]*object-fit:\s*contain/);
+  assert.match(client, /country-flags-public-domain\.txt/);
+  assert.match(flagNotice, /hampusborgos\/country-flags/);
   assert.match(client, /label="Flag to identify"/);
   assert.doesNotMatch(client, /label=\{`Flag of \$\{question\.country\.name\}`\}/);
   assert.match(client, /Region test/);

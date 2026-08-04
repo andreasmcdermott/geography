@@ -534,7 +534,7 @@ export default function QuizApp() {
           </section>
         </>
       )}
-      <footer><span>Made for curious minds.</span><span><a href="/licenses/flag-icons-MIT.txt">Flags by flag-icons · MIT</a> · <a href="/licenses/natural-earth-public-domain.txt">Map by Natural Earth</a></span><span>{countries.length} countries · Flags, capitals & maps</span></footer>
+      <footer><span>Made for curious minds.</span><span><a href="/licenses/country-flags-public-domain.txt">Flags by country-flags · Public domain</a> · <a href="/licenses/natural-earth-public-domain.txt">Map by Natural Earth</a></span><span>{countries.length} countries · Flags, capitals & maps</span></footer>
     </main>
   );
 }
