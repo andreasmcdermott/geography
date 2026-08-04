@@ -128,6 +128,13 @@ function plural(value: number, word: string) {
   return `${value} ${word}${value === 1 ? "" : "s"}`;
 }
 
+function normalizeSearchText(value: string) {
+  return value
+    .normalize("NFKD")
+    .replace(/\p{M}/gu, "")
+    .toLocaleLowerCase();
+}
+
 function FlagImage({ code, label, className = "" }: { code: string; label?: string; className?: string }) {
   return (
     <img
@@ -551,8 +558,8 @@ function FreePickQuiz({ boardCodes, remainingCodes, score, attempts, onAttempt }
     [remainingCodes],
   );
   const filteredCountries = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
-    return normalized ? remainingCountries.filter((country) => country.name.toLocaleLowerCase().includes(normalized)) : remainingCountries;
+    const normalized = normalizeSearchText(query.trim());
+    return normalized ? remainingCountries.filter((country) => normalizeSearchText(country.name).includes(normalized)) : remainingCountries;
   }, [query, remainingCountries]);
 
   useEffect(() => () => {
@@ -576,7 +583,7 @@ function FreePickQuiz({ boardCodes, remainingCodes, score, attempts, onAttempt }
       [selectedFlag.code]: { status: correct ? "correct" : "wrong", attempt: (current[selectedFlag.code]?.attempt ?? 0) + 1 },
     }));
     onAttempt(selectedFlag.code, country.code);
-    returnTimer.current = window.setTimeout(returnToBoard, 650);
+    returnTimer.current = window.setTimeout(returnToBoard, correct ? 325 : 650);
   }
 
   if (selectedFlag) {

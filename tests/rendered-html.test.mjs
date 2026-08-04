@@ -50,7 +50,11 @@ test("keeps account progress behind authenticated server storage", async () => {
   assert.match(client, /Matched flags stay faded in place/);
   assert.match(client, /matched-flag-slot/);
   assert.match(client, /free-answer-flash/);
-  assert.match(client, /window\.setTimeout\(returnToBoard, 650\)/);
+  assert.match(client, /normalize\("NFKD"\)/);
+  assert.match(client, /replace\(\/\\p\{M\}\/gu, ""\)/);
+  assert.match(client, /normalizeSearchText\(country\.name\)\.includes\(normalized\)/);
+  assert.match(client, /window\.setTimeout\(returnToBoard, correct \? 325 : 650\)/);
+  assert.match(styles, /\.free-answer-flash\.success\s*\{\s*animation-duration:\s*\.325s/);
   assert.match(client, /recent-wrong/);
   assert.doesNotMatch(client, /Choose another flag/);
   assert.match(client, /label=\{`Flag choice \$\{index \+ 1\}`\}/);
