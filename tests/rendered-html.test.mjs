@@ -1,8 +1,39 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import vm from "node:vm";
+import ts from "typescript";
 
 const root = new URL("../", import.meta.url);
+
+test("map clue choices apply throughout every quiz mode", async () => {
+  const source = await readFile(new URL("app/QuizApp.tsx", root), "utf8");
+  const functions = source.slice(source.indexOf("function shuffle"), source.indexOf("function plural"));
+  const { outputText } = ts.transpileModule(functions, { compilerOptions: { target: ts.ScriptTarget.ES2022 } });
+  const countries = Array.from({ length: 6 }, (_, index) => ({ code: `C${index}`, name: `Country ${index}`, region: index < 4 ? "Europe" : "Asia" }));
+  const context = vm.createContext({ countries });
+  vm.runInContext(outputText, context);
+  const progress = { map: {}, flags: {}, capitals: {} };
+
+  for (const mode of ["adaptive", "region", "elimination"]) {
+    for (const clues of ["names", "flags", "mix"]) {
+      const questions = context.buildQuiz("map", "all", progress, mode, "Europe", clues);
+      assert.equal(questions.length, mode === "adaptive" ? 6 : 4);
+      for (const [index, question] of questions.entries()) {
+        if (clues !== "mix") {
+          assert.equal(question.direction, clues === "names" ? "country-to-answer" : "answer-to-country");
+        } else if (index > 0) {
+          assert.notEqual(question.direction, questions[index - 1].direction);
+        }
+      }
+    }
+  }
+
+  for (const topic of ["flags", "capitals"]) {
+    const questions = context.buildQuiz(topic, "all", progress, "adaptive", "All", "names");
+    assert.equal(new Set(questions.map((question) => question.direction)).size, 2, "map settings must not affect other topics");
+  }
+});
 
 test("keeps account progress behind authenticated server storage", async () => {
   const [page, client, styles, indonesiaFlag, monacoFlag, flagNotice, mapClient, mapData, countriesSource, route, hosting, migration] = await Promise.all([

@@ -106,6 +106,10 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(53, 105, 202
 .region-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .region-picker button { border: 1px solid var(--line); background: var(--card); border-radius: 999px; padding: 7px 10px; color: var(--muted); cursor: pointer; font-size: 9px; }
 .region-picker button.active { background: var(--teal); border-color: var(--teal); color: white; }
+.map-clue-picker { margin: 0 0 14px; padding: 0; border: 0; min-width: 0; }
+.map-clue-picker legend { margin-bottom: 9px; font-size: 11px; font-weight: 600; }
+.map-clue-picker .region-picker { margin-bottom: 8px; }
+.map-clue-picker p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
 .length-picker { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; margin: 14px 0 20px; }
 .length-picker button { border: 1px solid var(--line); background: transparent; padding: 12px 6px; cursor: pointer; border-radius: 2px; font: 600 13px/1 var(--font-geist-mono), monospace; }
 .length-picker button.active { background: var(--ink); color: white; border-color: var(--ink); }

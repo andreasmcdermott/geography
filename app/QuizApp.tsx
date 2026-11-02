@@ -14,6 +14,7 @@ type QuizMode = "adaptive" | "region" | "elimination";
 type EliminationStyle = "guided" | "free";
 type RegionFilter = "All" | "Africa" | "Americas" | "Asia" | "Europe" | "Oceania";
 type QuizLength = 20 | 30 | 40 | 50 | "all";
+type MapClues = "names" | "flags" | "mix";
 
 type CountryProgress = {
   attempts: number;
@@ -97,7 +98,7 @@ function makeQuestion(country: Country, direction: Direction, optionPool = count
   return { country, direction, options: shuffle([country, ...distractors]) };
 }
 
-function buildQuiz(topic: Topic, length: QuizLength, progress: Progress, mode: QuizMode, region: RegionFilter): Question[] {
+function buildQuiz(topic: Topic, length: QuizLength, progress: Progress, mode: QuizMode, region: RegionFilter, mapClues: MapClues): Question[] {
   const regionalPool = region === "All" ? countries : countries.filter((country) => country.region === region);
   const available = mode === "adaptive"
     ? countries.filter((country) => !progress[topic][country.code]?.mastered)
@@ -109,7 +110,9 @@ function buildQuiz(topic: Topic, length: QuizLength, progress: Progress, mode: Q
   const firstDirection: Direction = Math.random() > 0.5 ? "country-to-answer" : "answer-to-country";
 
   return pool.map((country, index) => {
-    const direction = index % 2 === 0
+    const direction = topic === "map" && mapClues !== "mix"
+      ? mapClues === "names" ? "country-to-answer" : "answer-to-country"
+      : index % 2 === 0
       ? firstDirection
       : firstDirection === "country-to-answer"
         ? "answer-to-country"
@@ -152,6 +155,7 @@ export default function QuizApp() {
   const [eliminationStyle, setEliminationStyle] = useState<EliminationStyle>("guided");
   const [region, setRegion] = useState<RegionFilter>("All");
   const [quizLength, setQuizLength] = useState<QuizLength>(20);
+  const [mapClues, setMapClues] = useState<MapClues>("mix");
   const [progress, setProgress] = useState<Progress>(emptyProgress);
   const [hydrated, setHydrated] = useState(false);
   const [quiz, setQuiz] = useState<QuizState | null>(null);
@@ -250,7 +254,7 @@ export default function QuizApp() {
   }
 
   function startQuiz() {
-    const questions = buildQuiz(topic, quizLength, progress, quizMode, region);
+    const questions = buildQuiz(topic, quizLength, progress, quizMode, region, mapClues);
     setQuiz({
       mode: quizMode,
       eliminationStyle: freePickElimination ? "free" : "guided",
@@ -483,6 +487,19 @@ export default function QuizApp() {
                   </button>
                 )}
               </div>
+              {topic === "map" && (
+                <fieldset className="map-clue-picker">
+                  <legend>Map clues</legend>
+                  <div className="region-picker">
+                    {([ ["names", "Names only"], ["flags", "Flags only"], ["mix", "Mix"] ] as const).map(([value, label]) => (
+                      <button key={value} className={mapClues === value ? "active" : ""} onClick={() => setMapClues(value)} aria-pressed={mapClues === value}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <p>{mapClues === "names" ? "Find countries by name, with no flag clues." : mapClues === "flags" ? "Find the country that matches each flag." : "Alternate between country names and flags."}</p>
+                </fieldset>
+              )}
               {topic === "flags" && quizMode === "elimination" && (
                 <div className="elimination-style-picker" role="group" aria-label="Elimination style">
                   <button className={eliminationStyle === "guided" ? "active" : ""} onClick={() => setEliminationStyle("guided")} aria-pressed={eliminationStyle === "guided"}>
@@ -533,7 +550,7 @@ export default function QuizApp() {
                 <span aria-hidden="true">✦</span>
                 {quizMode === "adaptive"
                   ? topic === "map"
-                    ? "Prompts alternate between country names and flags, and retire after a 3-answer streak."
+                    ? `${mapClues === "mix" ? "Prompts alternate between country names and flags" : mapClues === "names" ? "Prompts use country names only" : "Prompts use flags only"}. Countries retire after a 3-answer streak.`
                     : "Questions alternate direction and retire after a 3-answer streak."
                   : quizMode === "elimination"
                     ? freePickElimination
@@ -542,7 +559,7 @@ export default function QuizApp() {
                         ? `Find every country in ${region === "All" ? "the world" : region}; completed locations are removed from the clickable map.`
                       : `Every unused flag or country in ${region === "All" ? "the world" : region} remains available until its turn is complete.`
                   : topic === "map"
-                    ? `Includes mastered countries from ${region === "All" ? "every region" : region} and alternates country-name and flag prompts.`
+                    ? `Includes mastered countries from ${region === "All" ? "every region" : region} ${mapClues === "mix" ? "and alternates country-name and flag prompts" : mapClues === "names" ? "with country-name prompts only" : "with flag prompts only"}.`
                     : `Includes mastered countries from ${region === "All" ? "every region" : region} and alternates both directions.`}
               </p>
             </aside>
