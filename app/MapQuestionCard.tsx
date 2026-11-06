@@ -2,17 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { geoNaturalEarth1, geoPath } from "d3-geo";
-import type { Feature, FeatureCollection, MultiPolygon } from "geojson";
 import { countries, Country } from "./countries";
+import QuizGlobe from "./QuizGlobe";
+import { markerCodes } from "./map-data";
+import type { MapFeature, MapRegion, WorldMap } from "./map-data";
 
-type RegionFilter = "All" | "Africa" | "Americas" | "Asia" | "Europe" | "Oceania";
-
-type MapProperties = {
-  code: string;
-  label: [number, number];
-};
-
-type MapFeature = Feature<MultiPolygon, MapProperties>;
 type MapViewport = { x: number; y: number; scale: number };
 
 type MapQuestionCardProps = {
@@ -20,7 +14,7 @@ type MapQuestionCardProps = {
   index: number;
   total: number;
   selectedCode: string | null;
-  region: RegionFilter;
+  region: MapRegion;
   prompt: "country" | "flag";
   elimination: boolean;
   eliminatedCodes: string[];
@@ -31,13 +25,8 @@ type MapQuestionCardProps = {
 };
 
 const countryByCode = new Map(countries.map((country) => [country.code, country]));
-const markerCodes = new Set([
-  "AD", "AG", "BH", "BB", "CV", "KM", "DM", "GD", "KI", "LI", "LU", "MV", "MT", "MH", "FM",
-  "MC", "NR", "PW", "KN", "LC", "VC", "SM", "ST", "SC", "SG", "TO", "TV", "VA",
-]);
-
 export default function MapQuestionCard(props: MapQuestionCardProps) {
-  const [featureCollection, setFeatureCollection] = useState<FeatureCollection<MultiPolygon, MapProperties> | null>(null);
+  const [featureCollection, setFeatureCollection] = useState<WorldMap | null>(null);
   const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
@@ -45,7 +34,7 @@ export default function MapQuestionCard(props: MapQuestionCardProps) {
     void fetch("/data/world-map.json", { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error("Map could not be loaded");
-        return response.json() as Promise<FeatureCollection<MultiPolygon, MapProperties>>;
+        return response.json() as Promise<WorldMap>;
       })
       .then(setFeatureCollection)
       .catch((error: unknown) => {
@@ -70,11 +59,13 @@ export default function MapQuestionCard(props: MapQuestionCardProps) {
   return <LoadedMapQuestionCard {...props} featureCollection={featureCollection} />;
 }
 
-function LoadedMapQuestionCard({ country, index, total, selectedCode, region, prompt, elimination, eliminatedCodes, canSkip, onAnswer, onNext, onSkip, featureCollection }: MapQuestionCardProps & { featureCollection: FeatureCollection<MultiPolygon, MapProperties> }) {
+function LoadedMapQuestionCard({ country, index, total, selectedCode, region, prompt, elimination, eliminatedCodes, canSkip, onAnswer, onNext, onSkip, featureCollection }: MapQuestionCardProps & { featureCollection: WorldMap }) {
   const answered = selectedCode !== null;
   const isCorrect = selectedCode === country.code;
   const [viewport, setViewport] = useState<MapViewport>({ x: 0, y: 0, scale: 1 });
   const [dragging, setDragging] = useState(false);
+  const [mapMode, setMapMode] = useState<"globe" | "flat">("globe");
+  const [globeUnavailable, setGlobeUnavailable] = useState(false);
   const dragRef = useRef<{ pointerId: number; x: number; y: number; originX: number; originY: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef(false);
 
@@ -153,10 +144,25 @@ function LoadedMapQuestionCard({ country, index, total, selectedCode, region, pr
       {prompt === "flag"
         ? <h1>Find this flag’s country on the map.</h1>
         : <h1>Find <em>{country.name}</em> on the map.</h1>}
-      <p className="question-hint">{elimination ? `${activeCodes.size} unused locations remain. ` : ""}Select the country’s location. Scroll or use the controls to zoom, then drag to pan.</p>
+      <p className="question-hint">{elimination ? `${activeCodes.size} unused locations remain. ` : ""}Select the country’s location. {mapMode === "globe" ? "Drag to spin the globe. Scroll or pinch to zoom." : "Scroll or use the controls to zoom, then drag to pan."}</p>
       {canSkip && <div className="skip-question-row"><button onClick={onSkip}>Skip for now <span>→</span></button></div>}
 
-      <div className="map-frame">
+      <div className="map-view-switch" role="group" aria-label="Map view">
+        <button aria-pressed={mapMode === "globe"} onClick={() => { setGlobeUnavailable(false); setMapMode("globe"); }}>3D globe</button>
+        <button aria-pressed={mapMode === "flat"} onClick={() => setMapMode("flat")}>Flat map</button>
+        <span>{mapMode === "globe" ? "Satellite imagery · no map edges" : "Includes keyboard country selection"}</span>
+      </div>
+      {globeUnavailable && <p className="map-fallback-notice" role="status">The 3D globe is unavailable on this device. You can continue with the flat map.</p>}
+      <div className={`map-frame ${mapMode === "globe" ? "globe-map-frame" : ""}`}>
+        {mapMode === "globe" ? <QuizGlobe
+          data={featureCollection}
+          activeCodes={activeCodes}
+          region={region}
+          selectedCode={selectedCode}
+          correctCode={answered ? country.code : null}
+          onAnswer={onAnswer}
+          onUnavailable={() => { setGlobeUnavailable(true); setMapMode("flat"); }}
+        /> : <>
         <div className="map-controls" role="group" aria-label="Map controls">
           <button onClick={focusRegion}>{region === "All" ? "World view" : `Focus ${region}`}</button>
           <button onClick={() => zoomBy(1 / 1.4)} disabled={viewport.scale === 1} aria-label="Zoom out">−</button>
@@ -244,6 +250,7 @@ function LoadedMapQuestionCard({ country, index, total, selectedCode, region, pr
             })}
           </g>
         </svg>
+        </>}
         <div className="map-legend" aria-hidden="true"><span className="active-swatch" />{elimination ? "Remaining countries" : region === "All" ? "Quiz countries" : region}<span className="inactive-swatch" />{elimination ? "Used / outside quiz" : "Outside quiz"}</div>
       </div>
 

@@ -85,6 +85,21 @@ or enforce explicit server-side membership or allowlist checks.
 Use SIWC for account pages, user-specific dashboards, saved records, and write
 actions tied to the current ChatGPT user. Leave public content anonymous.
 
+## Quiz globe
+
+Map quizzes open in a MapLibre GL JS globe with NASA Blue Marble satellite
+imagery. Drag to rotate, scroll or pinch to zoom, and use Borders to show or hide
+country outlines. The same country polygons receive clicks with borders hidden.
+Small countries have fixed-size targets. Oceania focuses across the date line so
+Fiji and Tonga can appear together.
+
+The Flat map button retains the SVG map and keyboard country selection. If WebGL
+is unavailable, the quiz switches to this map automatically. If satellite tiles
+fail, the globe shows selectable country shapes. Imagery requires an internet
+connection and has detail through zoom 8. It is a historical global composite,
+not live imagery. No API key is required. See
+[the imagery credits](public/licenses/nasa-blue-marble.txt).
+
 ## Useful Commands
 
 - `npm run dev`: start local development

@@ -1,0 +1,16 @@
+Satellite imagery: NASA Blue Marble Next Generation, delivered by NASA GIBS.
+
+NASA Visible Earth imagery by Reto Stockli, NASA Earth Observatory,
+with contributions from NASA Goddard Space Flight Center and the MODIS team.
+
+About the imagery:
+https://earthobservatory.nasa.gov/features/BlueMarble
+
+NASA Earth Observatory image use policy:
+https://earthobservatory.nasa.gov/image-use-policy
+
+NASA GIBS documentation:
+https://nasa-gibs.github.io/gibs-api-docs/
+
+This is a historical, cloud-free global composite, not live imagery.
+The GIBS GoogleMapsCompatible_Level8 layer provides tiles through zoom 8.

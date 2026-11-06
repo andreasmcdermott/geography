@@ -232,6 +232,21 @@ footer a:hover { color: var(--ink); }
 @keyframes restore-wrong-flag { 0%, 45% { opacity: .35; } 100% { opacity: 1; } }
 
 .map-frame { position: relative; background: #e9eee9; border: 1px solid var(--line); padding: 10px; overflow: hidden; }
+.map-view-switch { display: flex; align-items: center; gap: 5px; margin: 22px 0 9px; }
+.map-view-switch button { padding: 9px 14px; border: 1px solid var(--line); background: var(--card); color: var(--muted); font: inherit; font-size: 11px; cursor: pointer; }
+.map-view-switch button[aria-pressed="true"] { background: var(--ink); color: var(--cream, #fbfaf6); border-color: var(--ink); }
+.map-view-switch span { margin-left: auto; color: var(--muted); font-size: 10px; }
+.map-fallback-notice { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.map-frame.globe-map-frame { padding: 0; background: #061225; }
+.globe-frame { position: relative; }
+.quiz-globe { width: 100%; height: clamp(420px, 64vh, 650px); background: radial-gradient(ellipse at center, #162b47, #040b19 75%); }
+.quiz-globe .maplibregl-canvas { outline-offset: -3px; }
+.quiz-globe .maplibregl-ctrl-attrib { font-size: 10px; }
+.globe-controls { flex-wrap: wrap; max-width: calc(100% - 28px); }
+.globe-controls button[aria-pressed="true"] { background: #e3ecd4; }
+.globe-status { position: absolute; inset: 0; display: grid; place-items: center; color: #fbfaf6; pointer-events: none; font-size: 14px; }
+.globe-notice { position: absolute; top: 72px; left: 18px; right: 18px; padding: 10px; background: #fbfaf6; color: var(--ink); font-size: 12px; }
+.globe-map-frame .map-legend { bottom: 32px; }
 .map-loading-card { min-height: 420px; border: 1px solid var(--line); background: #e9eee9; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .map-loading-card > span { width: 58px; height: 58px; border-radius: 50%; background: var(--lime); display: grid; place-items: center; font-size: 28px; margin-bottom: 18px; }
 .map-loading-card strong { font: 500 28px/1.1 Georgia, serif; }
@@ -346,6 +361,10 @@ footer a:hover { color: var(--ink); }
   .map-controls { top: 8px; right: 8px; }
   .map-controls button { height: 29px; min-width: 30px; padding: 0 7px; }
   .map-controls button:first-child { display: none; }
+  .globe-controls { top: 8px; left: 8px; right: auto; max-width: calc(100% - 16px); }
+  .globe-controls button:first-child { display: inline-block; }
+  .map-view-switch span { display: none; }
+  .quiz-globe { height: 480px; }
   .map-legend { left: 8px; bottom: 7px; }
   .library-heading { grid-template-columns: 1fr; }
   .country-row { grid-template-columns: 55px 1fr auto; padding-right: 0; }
