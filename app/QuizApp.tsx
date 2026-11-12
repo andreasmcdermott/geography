@@ -21,6 +21,7 @@ type CountryProgress = {
   correct: number;
   streak: number;
   mastered: boolean;
+  lastPlayedAt?: number;
 };
 
 type Progress = Record<Topic, Record<string, CountryProgress>>;
@@ -66,6 +67,7 @@ function mergeProgress(local: Progress, remote: Progress): Progress {
           correct: Math.max(localRecord.correct, remoteRecord.correct),
           streak: Math.max(localRecord.streak, remoteRecord.streak),
           mastered: localRecord.mastered || remoteRecord.mastered,
+          lastPlayedAt: Math.max(localRecord.lastPlayedAt ?? 0, remoteRecord.lastPlayedAt ?? 0),
         };
       }
     }
@@ -100,10 +102,16 @@ function makeQuestion(country: Country, direction: Direction, optionPool = count
 
 function buildQuiz(topic: Topic, length: QuizLength, progress: Progress, mode: QuizMode, region: RegionFilter, mapClues: MapClues): Question[] {
   const regionalPool = region === "All" ? countries : countries.filter((country) => country.region === region);
+  const learning = countries.filter((country) => !progress[topic][country.code]?.mastered);
+  const refresher = mode === "adaptive" && learning.length === 0;
   const available = mode === "adaptive"
-    ? countries.filter((country) => !progress[topic][country.code]?.mastered)
+    ? refresher ? countries : learning
     : regionalPool;
   const shuffled = shuffle(available);
+  if (refresher) {
+    // Shuffle first so countries with missing or equal timestamps get a fair turn.
+    shuffled.sort((a, b) => (progress[topic][a.code]?.lastPlayedAt ?? 0) - (progress[topic][b.code]?.lastPlayedAt ?? 0));
+  }
   const pool = mode === "elimination" || length === "all" ? shuffled : shuffled.slice(0, Math.min(length, shuffled.length));
   const optionPool = mode === "region" ? regionalPool : countries;
   const eliminationAnswerOrder = mode === "elimination" ? shuffle(regionalPool) : [];
@@ -238,12 +246,13 @@ export default function QuizApp() {
   }, [progress, topic]);
 
   const availableCount = useMemo(() => {
-    if (quizMode === "adaptive") return stats.remaining;
+    if (quizMode === "adaptive") return stats.remaining || countries.length;
     return region === "All" ? countries.length : countries.filter((country) => country.region === region).length;
   }, [quizMode, region, stats.remaining]);
 
   const sessionCount = quizMode === "elimination" || quizLength === "all" ? availableCount : Math.min(quizLength, availableCount);
   const freePickElimination = topic === "flags" && quizMode === "elimination" && eliminationStyle === "free";
+  const refresher = quizMode === "adaptive" && stats.remaining === 0;
 
   function chooseTopic(nextTopic: Topic) {
     setTopic(nextTopic);
@@ -281,7 +290,8 @@ export default function QuizApp() {
             attempts: old.attempts + 1,
             correct: old.correct + (isCorrect ? 1 : 0),
             streak,
-            mastered: streak >= 3,
+            mastered: old.mastered || streak >= 3,
+            lastPlayedAt: Date.now(),
           },
         },
       };
@@ -363,8 +373,7 @@ export default function QuizApp() {
             topic={topic}
             score={quiz.score}
             total={quiz.mode === "elimination" && quiz.eliminationStyle === "free" ? quiz.attempts : quiz.questions.length}
-            remaining={countries.length - Object.values(progress[topic]).filter((item) => item.mastered).length}
-            canRepeat={quiz.mode !== "adaptive" || countries.length - Object.values(progress[topic]).filter((item) => item.mastered).length > 0}
+            remaining={stats.remaining}
             onAgain={startQuiz}
             onHome={() => setQuiz(null)}
           />
@@ -471,12 +480,12 @@ export default function QuizApp() {
                 <span>02</span>
                 <div>
                   <h2>{quizMode === "adaptive" ? "Set your pace" : quizMode === "elimination" ? "Build an elimination quiz" : "Build a region test"}</h2>
-                  <p>{quizMode === "adaptive" ? "Mastered countries stay retired." : quizMode === "elimination" ? topic === "map" ? "Completed locations are removed as you go." : "The answer bank shrinks as you go." : "Mastery is ignored in test mode."}</p>
+                  <p>{quizMode === "adaptive" ? refresher ? "Refresh the countries you played longest ago." : "Master every country, then keep your memory fresh." : quizMode === "elimination" ? topic === "map" ? "Completed locations are removed as you go." : "The answer bank shrinks as you go." : "Mastery is ignored in test mode."}</p>
                 </div>
               </div>
               <div className={`mode-picker ${topic !== "capitals" ? "three-modes" : ""}`} role="group" aria-label="Quiz mode">
                 <button className={quizMode === "adaptive" ? "active" : ""} onClick={() => setQuizMode("adaptive")} aria-pressed={quizMode === "adaptive"}>
-                  <strong>Adaptive</strong><span>Learn what’s left</span>
+                  <strong>Adaptive</strong><span>{refresher ? "Refresh your memory" : "Learn what’s left"}</span>
                 </button>
                 <button className={quizMode === "region" ? "active" : ""} onClick={() => setQuizMode("region")} aria-pressed={quizMode === "region"}>
                   <strong>Region test</strong><span>Include everything</span>
@@ -530,7 +539,7 @@ export default function QuizApp() {
               )}
               <div className="session-summary">
                 <div><span>{freePickElimination ? "Flags on board" : "Today’s set"}</span><strong>{sessionCount}</strong><small>{freePickElimination ? "flags" : "questions"}</small></div>
-                <div><span>{quizMode === "adaptive" ? "Still learning" : quizMode === "elimination" ? freePickElimination ? "Country choices" : "Starting choices" : "Available"}</span><strong>{availableCount}</strong><small>countries</small></div>
+                <div><span>{quizMode === "adaptive" ? refresher ? "Ready to refresh" : "Still learning" : quizMode === "elimination" ? freePickElimination ? "Country choices" : "Starting choices" : "Available"}</span><strong>{availableCount}</strong><small>countries</small></div>
               </div>
               <button className="start-button" onClick={startQuiz} disabled={availableCount === 0 || syncStatus === "syncing"}>
                 <span>
@@ -542,14 +551,16 @@ export default function QuizApp() {
                         ? `Start ${region === "All" ? "world" : region} ${freePickElimination ? "free-pick" : topic === "map" ? "map elimination" : "guided"} quiz`
                         : quizMode === "region"
                         ? `Start ${region === "All" ? "world" : region} ${topic === "flags" ? "flag" : topic === "capitals" ? "capital" : "map"} test`
-                        : `Start ${topic === "flags" ? "flag" : topic === "capitals" ? "capital" : "map"} quiz`}
+                        : `Start ${topic === "flags" ? "flag" : topic === "capitals" ? "capital" : "map"} ${refresher ? "refresher" : "quiz"}`}
                 </span>
                 <b aria-hidden="true">↗</b>
               </button>
               <p className="adaptive-note">
                 <span aria-hidden="true">✦</span>
                 {quizMode === "adaptive"
-                  ? topic === "map"
+                  ? refresher
+                    ? "Your least recently played countries come first. Each answer updates their place in the refresher queue."
+                    : topic === "map"
                     ? `${mapClues === "mix" ? "Prompts alternate between country names and flags" : mapClues === "names" ? "Prompts use country names only" : "Prompts use flags only"}. Countries retire after a 3-answer streak.`
                     : "Questions alternate direction and retire after a 3-answer streak."
                   : quizMode === "elimination"
@@ -732,7 +743,7 @@ function AnswerFeedback({ isCorrect, question, atEnd, onNext, floating = false }
   );
 }
 
-function QuizComplete({ topic, score, total, remaining, canRepeat, onAgain, onHome }: { topic: Topic; score: number; total: number; remaining: number; canRepeat: boolean; onAgain: () => void; onHome: () => void }) {
+function QuizComplete({ topic, score, total, remaining, onAgain, onHome }: { topic: Topic; score: number; total: number; remaining: number; onAgain: () => void; onHome: () => void }) {
   const percent = total ? Math.round((score / total) * 100) : 100;
   return (
     <section className="complete-card">
@@ -742,7 +753,7 @@ function QuizComplete({ topic, score, total, remaining, canRepeat, onAgain, onHo
       <p>{total ? `You scored ${score} out of ${total} in your ${topic} session.` : `There are no ${topic} left in your learning queue.`}</p>
       <div className="score-ring"><strong>{percent}%</strong><span>accuracy</span></div>
       <div className="complete-stats"><div><strong>{score}</strong><span>correct</span></div><div><strong>{remaining}</strong><span>still learning</span></div></div>
-      <div className="complete-actions"><button className="start-button" onClick={onAgain} disabled={!canRepeat}>Study another set <b>↗</b></button><button className="quiet-button" onClick={onHome}>Back to dashboard</button></div>
+      <div className="complete-actions"><button className="start-button" onClick={onAgain}>{remaining === 0 ? "Refresh another set" : "Study another set"} <b>↗</b></button><button className="quiet-button" onClick={onHome}>Back to dashboard</button></div>
     </section>
   );
 }

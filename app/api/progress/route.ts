@@ -10,6 +10,7 @@ type StoredRow = {
   correct: number;
   streak: number;
   mastered: number;
+  updated_at: string;
 };
 
 type ProgressRecord = {
@@ -17,6 +18,7 @@ type ProgressRecord = {
   correct: number;
   streak: number;
   mastered: boolean;
+  lastPlayedAt?: number;
 };
 
 const topics: Topic[] = ["flags", "capitals", "map"];
@@ -43,7 +45,9 @@ function parseRecord(value: unknown): ProgressRecord | null {
   const streak = asCount(raw.streak);
   if (attempts === null || correct === null || streak === null || correct > attempts || streak > attempts) return null;
   if (typeof raw.mastered !== "boolean") return null;
-  return { attempts, correct, streak, mastered: raw.mastered };
+  const lastPlayedAt = raw.lastPlayedAt;
+  if (lastPlayedAt !== undefined && (typeof lastPlayedAt !== "number" || !Number.isSafeInteger(lastPlayedAt) || lastPlayedAt < 0 || lastPlayedAt > 8.64e15)) return null;
+  return { attempts, correct, streak, mastered: raw.mastered, lastPlayedAt };
 }
 
 function rowToRecord(row: StoredRow): ProgressRecord {
@@ -52,6 +56,7 @@ function rowToRecord(row: StoredRow): ProgressRecord {
     correct: row.correct,
     streak: row.streak,
     mastered: Boolean(row.mastered),
+    lastPlayedAt: Date.parse(row.updated_at.includes("T") ? row.updated_at : `${row.updated_at.replace(" ", "T")}Z`),
   };
 }
 
@@ -66,7 +71,7 @@ export async function GET() {
 
   const result = await getD1()
     .prepare(
-      `SELECT topic, country_code, attempts, correct, streak, mastered
+      `SELECT topic, country_code, attempts, correct, streak, mastered, updated_at
        FROM country_progress
        WHERE user_email = ?
        ORDER BY topic, country_code`,
@@ -98,13 +103,16 @@ export async function PUT(request: Request) {
   const db = getD1();
   const upsert = `INSERT INTO country_progress
     (user_email, topic, country_code, attempts, correct, streak, mastered, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(user_email, topic, country_code) DO UPDATE SET
       attempts = MAX(country_progress.attempts, excluded.attempts),
       correct = MAX(country_progress.correct, excluded.correct),
       streak = MAX(country_progress.streak, excluded.streak),
       mastered = MAX(country_progress.mastered, excluded.mastered),
-      updated_at = CURRENT_TIMESTAMP`;
+      updated_at = CASE
+        WHEN julianday(excluded.updated_at) > julianday(country_progress.updated_at) THEN excluded.updated_at
+        ELSE country_progress.updated_at
+      END`;
 
   for (const topic of topics) {
     const topicProgress = rawProgress[topic];
@@ -122,6 +130,8 @@ export async function PUT(request: Request) {
           record.correct,
           record.streak,
           record.mastered ? 1 : 0,
+          // Legacy local records have no date. Treat them as unseen, not played now.
+          new Date(record.lastPlayedAt ?? 0).toISOString(),
         ),
       );
     }
@@ -146,7 +156,7 @@ export async function POST(request: Request) {
     .prepare(
       `INSERT INTO country_progress
         (user_email, topic, country_code, attempts, correct, streak, mastered, updated_at)
-       VALUES (?, ?, ?, 1, ?, ?, 0, CURRENT_TIMESTAMP)
+       VALUES (?, ?, ?, 1, ?, ?, 0, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
        ON CONFLICT(user_email, topic, country_code) DO UPDATE SET
          attempts = country_progress.attempts + 1,
          correct = country_progress.correct + excluded.correct,
@@ -155,14 +165,14 @@ export async function POST(request: Request) {
            WHEN country_progress.mastered = 1 OR (? = 1 AND country_progress.streak + 1 >= 3) THEN 1
            ELSE 0
          END,
-         updated_at = CURRENT_TIMESTAMP`,
+         updated_at = excluded.updated_at`,
     )
     .bind(auth.email, payload.topic, payload.countryCode, correctValue, correctValue, correctValue, correctValue)
     .run();
 
   const row = await db
     .prepare(
-      `SELECT topic, country_code, attempts, correct, streak, mastered
+      `SELECT topic, country_code, attempts, correct, streak, mastered, updated_at
        FROM country_progress
        WHERE user_email = ? AND topic = ? AND country_code = ?`,
     )
